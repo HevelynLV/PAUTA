@@ -3,9 +3,14 @@
 ## Onde paramos
 
 Última atualização: 03/11/2026 · por Gabriel
-Etapa atual: 5. Assinantes, **concluída** na branch `etapa-5-assinantes` (5.1 a 5.6 feitos), esperando o merge do Pull Request #6 na `main`. Os filtros do catálogo, que travavam a Etapa 6, foram decididos em 03/11/2026. A Etapa 4 foi para a `main` (Pull Request #5)
+Etapa atual: 6. Catálogo, na branch `etapa-6-catalogo` (criada da `main` depois do merge do Pull Request #6, Etapa 5)
 
-Em resumo, para quem chega agora: o admin ativa, bloqueia, desbloqueia e exclui imobiliárias e corretores autônomos na tela Assinantes; o cadastro só aceita CRECI com a letra (J para imobiliária; F ou J para autônomo); e o responsável pela imobiliária convida corretores (por e-mail ou por link, até 20 convites por hora), cancela convites e remove corretores na tela Equipe. O corretor convidado entra pelo link já vinculado e ativo. A auditoria não achou nada crítico e todos os achados foram corrigidos ou levados para "Pendências" (Etapa 13)
+Etapa 6:
+- 6.1 feito (03/11/2026): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 03/11/2026 (plano da Etapa 6)") e no CLAUDE.md: catálogo e detalhe servidos por funções do banco só com as colunas do corretor (resolve a pendência da auditoria da Etapa 2); "em negociação" calculado num lugar só; sem a busca por texto do protótipo; páginas de 12 com "Anterior/Próxima" na URL; tipo e bairro pelo número na URL; mais recente primeiro; botões de visita e proposta escondidos até as Etapas 7 e 8; contato divulgado com ligar, WhatsApp e e-mail; meta do RNF14 de 3 s (medida na Etapa 13)
+  - Passos: 6.2a migration `catalogo` (funções `status_no_catalogo`, `catalogo`, `imovel_do_catalogo` e `imovel_no_catalogo`; sai a regra "assinante ativo lê os disponíveis"; regras de `fotos_imovel` e do Storage passam a usar a função; índices; testes no `testar_rls.sql`, alguns antigos mudam de forma), 6.2b lista e paginação (`src/lib/catalogo.ts`), 6.2c filtros (formulário GET com o `<Form>` do Next; folha de filtros no celular, coluna no site), 6.2d e2e no celular e no computador, 6.3a detalhe com galeria e contato, 6.3b e2e conferindo que o contato escondido não vem no HTML nem no pacote do servidor, 6.4 auditoria, 6.5 fechar
+- Próximo: passo 6.2 (prompt "Lista e filtros" do `docs/prompts.md`), começando pela migration do 6.2a
+
+Etapa 5, em resumo: o admin ativa, bloqueia, desbloqueia e exclui imobiliárias e corretores autônomos na tela Assinantes; o cadastro só aceita CRECI com a letra (J para imobiliária; F ou J para autônomo); e o responsável pela imobiliária convida corretores (por e-mail ou por link, até 20 convites por hora), cancela convites e remove corretores na tela Equipe. O corretor convidado entra pelo link já vinculado e ativo. A auditoria não achou nada crítico e todos os achados foram corrigidos ou levados para "Pendências" (Etapa 13)
 
 Etapa 5:
 - 5.1 feito (28/10/2026): plano aprovado e enviado (`etapa-5-assinantes` no GitHub). Passos: 5.2 admin e assinantes (migration do CRECI, `admin.ts`, AdmAssinantes), 5.3 teste do autônomo, 5.4 convites e equipe (migration: código do convite gerado pelo banco, corretor removido, `remover_corretor`; ImobEquipe e Convite), 5.5 auditoria, 5.6 fechar
@@ -239,7 +244,7 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - O proprietário pode editar imóvel em negociação (ex.: mudar o preço com propostas aceitas)? Vale a mesma regra de "edição de imóvel disponível"? Na Etapa 4 ainda não há propostas: a sugestão do plano é manter a regra do disponível e rever na Etapa 8
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
 - Etapa 6:
-  - (auditoria da Etapa 2) O assinante lê todas as colunas do imóvel, inclusive `proprietario_id`, `exclusividade_fim` (diz quando o PAUTA perde a exclusividade, o que ajuda a desintermediação), `termo_versao`, `captado_pelo_admin` e `versao`. Servir o catálogo por uma view ou função só com as colunas do corretor
+  - (auditoria da Etapa 2) O assinante lê todas as colunas do imóvel, inclusive `proprietario_id`, `exclusividade_fim` (diz quando o PAUTA perde a exclusividade, o que ajuda a desintermediação), `termo_versao`, `captado_pelo_admin` e `versao`. Servir o catálogo por uma view ou função só com as colunas do corretor. **Decidido no 6.1: funções do banco; entra no 6.2a**
 - Etapa 7:
   - Visita recusada: o proprietário escreve um motivo ou sugere outro horário? (no protótipo, só recusa)
   - Horários da visita: livres ou em horários fixos (o protótipo usa horários das 09:00 às 17:00), e se o recado do corretor ao proprietário entra

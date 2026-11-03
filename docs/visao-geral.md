@@ -120,7 +120,7 @@ Como o app precisa se comportar. Os itens de segurança e privacidade vêm das r
 | RNF11 | Rastreabilidade | Toda edição de imóvel aprovado fica registrada (campo, valor antigo e novo) para o admin |
 | RNF12 | Qualidade | Toda mudança no banco vira migration no repositório, e o roteiro `testar_rls.sql` precisa passar |
 | RNF13 | Qualidade | Os testes ponta a ponta (Playwright) passam antes de cada Pull Request ser aceito |
-| RNF14 | Desempenho | O catálogo abre rápido no celular em rede móvel (meta em segundos: a definir) |
+| RNF14 | Desempenho | O catálogo abre rápido no celular em rede móvel: até 3 segundos no Lighthouse, com celular e 4G simulados (decidido em 03/11/2026) |
 | RNF15 | Disponibilidade | Hospedagem na Vercel e no Supabase gerenciado, sem servidor próprio (meta de disponibilidade: a definir) |
 | RNF16 | Escala | MVP só em Florianópolis (SC); volume esperado de imóveis e imobiliárias no piloto: a definir |
 
@@ -148,6 +148,19 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 03/11/2026 (plano da Etapa 6)
+
+- O assinante não lê mais a tabela de imóveis direto: o catálogo e o detalhe vêm de funções do banco que devolvem só as colunas do corretor (sem `proprietario_id`, `exclusividade_fim`, `termo_versao`, `captado_pelo_admin` nem `versao`). As fotos continuam visíveis para ele por uma função auxiliar. Resolve a pendência da auditoria da Etapa 2.
+- "Disponível" ou "em negociação" é decidido num lugar só no banco; a Etapa 8 só troca esse cálculo.
+- O campo "Buscar por bairro ou título" do protótipo sai, porque não está nos filtros decididos. No lugar, um campo "procurar bairro" dentro da lista de bairros (56 nomes).
+- Os botões "Pedir visita" e "Enviar proposta" ficam escondidos até as Etapas 7 e 8; o espaço deles fica preparado no layout.
+- Paginação: páginas de 12 imóveis, com "Anterior" e "Próxima" e o número da página na URL.
+- Quando o proprietário mostra o contato, o corretor vê o telefone com botão de ligar, um botão de WhatsApp e o e-mail.
+- Na URL, tipo e bairro vão pelo número (ex.: `bairro=12`), para um link salvo não quebrar se um nome mudar.
+- Ordem fixa da lista: o imóvel que entrou no catálogo mais recentemente aparece primeiro.
+- Meta do RNF14: o catálogo abre em até 3 segundos no Lighthouse, com celular e 4G simulados. A medição de verdade é no endereço público, na Etapa 13.
+- Textos: "Contato do proprietário não divulgado" (neutro; o protótipo dizia "da proprietária"). No topo da lista, o nome da imobiliária (ou o do corretor autônomo), como no protótipo.
 
 ## Decisões tomadas em 03/11/2026 (filtros do catálogo)
 
