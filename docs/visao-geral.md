@@ -86,7 +86,7 @@ O que o app faz. Todos os 32 estão a construir no repositório novo (RF01 a RF0
 | RF16 | Admin | Excluir imobiliária ou corretor autônomo pendente com o usuário dele, liberando o CRECI | A construir |
 | RF17 | Admin | Revisar as edições de imóveis disponíveis e marcar como revisadas | A construir |
 | RF18 | Catálogo | Só assinantes ativos veem o catálogo, e só imóveis aprovados aparecem | A construir |
-| RF19 | Catálogo | Filtrar o catálogo no celular e no site (quais filtros: a definir) | A construir |
+| RF19 | Catálogo | Filtrar o catálogo no celular e no site por tipo, bairro (vários ao mesmo tempo), faixa de preço, quartos mínimos e status (decidido em 03/11/2026) | A construir |
 | RF20 | Catálogo | O corretor vê no catálogo só dois status: disponível ou em negociação (há proposta aceita). O imóvel continua recebendo visitas e propostas e sai do catálogo assim que o admin aprova o contrato | A construir |
 | RF21 | Visita | Corretor pede visita pelo app, sugerindo um horário | A construir |
 | RF22 | Visita | Proprietário confirma ou recusa a visita no app, e o corretor vê a resposta | A construir |
@@ -140,7 +140,7 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 3. Login e perfis | Cadastro, login, áreas separadas | Cada tipo de usuário só abre a própria área | — |
 | 4. Imóvel | Cadastro com fotos e termo; captação pelo admin; aprovar ou reprovar | Imóvel do proprietário fica pendente; o do admin entra disponível quando o dono aceita o termo | — (usa um termo provisório) |
 | 5. Assinantes | Ativação pelo admin, convite de corretores, autônomo | Corretor convidado entra vinculado e ativo | — |
-| 6. Catálogo | Filtros, status disponível ou em negociação | Assinante ativo filtra no celular; bloqueado não vê nada | Quais filtros |
+| 6. Catálogo | Filtros, status disponível ou em negociação | Assinante ativo filtra no celular; bloqueado não vê nada | — (filtros decididos em 03/11/2026) |
 | 7. Visita | Pedido e confirmação | O corretor vê a resposta do proprietário | — |
 | 8. Proposta | Envio e aceite, várias ao mesmo tempo | Duas propostas aceitas deixam o imóvel em negociação | — |
 | 9. Contrato e venda | Envio, conferência, comissão | Aprovar marca vendido e recusa as outras numa operação só | % do PAUTA |
@@ -148,6 +148,14 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 03/11/2026 (filtros do catálogo)
+
+- O catálogo tem cinco filtros, no celular e no site: tipo, bairro, faixa de preço (mínimo e máximo), quartos mínimos (1+ a 4+) e status (disponível ou em negociação). É a sugestão do protótipo (SiteCorCatalogo), escolhida porque usa só colunas que o imóvel já tem e porque, com poucos imóveis no piloto, filtros demais deixariam a lista vazia à toa.
+- No bairro, o corretor marca vários ao mesmo tempo (ex.: Campeche, Rio Tavares e Morro das Pedras), porque costuma trabalhar uma região, não um bairro só.
+- Com quartos mínimos escolhido, imóvel sem quartos (terreno, sala comercial) sai da lista.
+- Os filtros ficam na URL, para o corretor compartilhar uma busca.
+- Ficam fora do MVP: vagas, área, banheiros e escolha da ordenação. Entram depois do piloto, se os corretores pedirem.
 
 ## Decisões tomadas em 28/10/2026 (plano da Etapa 5)
 

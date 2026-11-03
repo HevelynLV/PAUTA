@@ -2,8 +2,8 @@
 
 ## Onde paramos
 
-Última atualização: 28/10/2026 · por Gabriel
-Etapa atual: 5. Assinantes, **concluída** na branch `etapa-5-assinantes` (5.1 a 5.6 feitos), esperando o Pull Request para a `main`. A Etapa 4 foi para a `main` (Pull Request #5)
+Última atualização: 03/11/2026 · por Gabriel
+Etapa atual: 5. Assinantes, **concluída** na branch `etapa-5-assinantes` (5.1 a 5.6 feitos), esperando o merge do Pull Request #6 na `main`. Os filtros do catálogo, que travavam a Etapa 6, foram decididos em 03/11/2026. A Etapa 4 foi para a `main` (Pull Request #5)
 
 Em resumo, para quem chega agora: o admin ativa, bloqueia, desbloqueia e exclui imobiliárias e corretores autônomos na tela Assinantes; o cadastro só aceita CRECI com a letra (J para imobiliária; F ou J para autônomo); e o responsável pela imobiliária convida corretores (por e-mail ou por link, até 20 convites por hora), cancela convites e remove corretores na tela Equipe. O corretor convidado entra pelo link já vinculado e ativo. A auditoria não achou nada crítico e todos os achados foram corrigidos ou levados para "Pendências" (Etapa 13)
 
@@ -49,8 +49,8 @@ Etapa 5:
 - 5.6 fechado (28/10/2026, Gabriel): "Pronto quando" conferido pelos e2e da bateria completa: o admin ativa a imobiliária (`admin-assinantes.spec.ts`, "o admin vê o pendente com o CRECI em destaque e ativa") e o autônomo (`autonomo.spec.ts`, caminho completo), e o corretor convidado entra vinculado e ativo (`equipe.spec.ts`, "convite por e-mail")
 - Próximo:
   1. Abrir o Pull Request `etapa-5-assinantes` → `main` no GitHub, revisar e fazer o merge
-  2. Antes da Etapa 6, decidir **quais filtros o catálogo terá** (decisão em aberto: use o prompt "Antes da Etapa 1: decisões em aberto" do `docs/prompts.md` e registre na Visão geral e no CLAUDE.md)
-  3. Depois, criar a branch `etapa-6-catalogo` a partir da `main` atualizada e começar pelo passo 6.1 (`/clear` + modo de planejamento)
+  2. ~~Decidir os filtros do catálogo~~: feito em 03/11/2026 (Gabriel). Tipo, bairro (vários ao mesmo tempo), faixa de preço, quartos mínimos e status, na URL; vagas, área, banheiros e ordenação ficam para depois do piloto. Registrado na Visão geral ("Decisões tomadas em 03/11/2026") e no CLAUDE.md. No 6.1, use essa lista no lugar de `<lista>`
+  3. Depois do merge, criar a branch `etapa-6-catalogo` a partir da `main` atualizada e começar pelo passo 6.1 (`/clear` + modo de planejamento)
 
 Etapa 4:
 - 4.1 feito (26/10/2026): plano aprovado. Decisões registradas na Visão geral ("Decisões tomadas em 26/10/2026 (plano da Etapa 4)") e no CLAUDE.md: status `rascunho` para o cadastro seguir a ordem do protótipo (dados, fotos, termo); dono edita imóvel pendente sem registro; página mínima do imóvel do proprietário com a escolha do contato; listas de tipos e bairros (lista oficial de Florianópolis, conferir a fonte); fotos JPG/PNG/WebP até 10 MB, de 1 a 20; termo numa tabela de versões (`2026-10-provisorio`). Migrations previstas: `imoveis_etapa_4` (4.2: termos, rascunho, edição de pendente, listas e os itens da auditoria da Etapa 2), `fotos_storage` (4.3: bucket privado `fotos-imoveis`) e `captacao` (4.7: `captar_imovel`, `aceitar_termo_captado`, `buscar_proprietarios`). Os testes que faltam da auditoria da Etapa 2 entram no 4.2
@@ -239,7 +239,6 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - O proprietário pode editar imóvel em negociação (ex.: mudar o preço com propostas aceitas)? Vale a mesma regra de "edição de imóvel disponível"? Na Etapa 4 ainda não há propostas: a sugestão do plano é manter a regra do disponível e rever na Etapa 8
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
 - Etapa 6:
-  - Quais filtros o catálogo terá (o protótipo sugere tipo, status, bairro, faixa de preço, quartos e busca por título ou bairro)
   - (auditoria da Etapa 2) O assinante lê todas as colunas do imóvel, inclusive `proprietario_id`, `exclusividade_fim` (diz quando o PAUTA perde a exclusividade, o que ajuda a desintermediação), `termo_versao`, `captado_pelo_admin` e `versao`. Servir o catálogo por uma view ou função só com as colunas do corretor
 - Etapa 7:
   - Visita recusada: o proprietário escreve um motivo ou sugere outro horário? (no protótipo, só recusa)
@@ -390,3 +389,4 @@ PAUTA (antes, Domora):
 - 27/10/2026 · Hevelyn · Etapa 4 concluída: cadastro do imóvel em 3 passos (dados, fotos, termo provisório), fotos no Storage com ordem e miniatura, Meus imóveis com apagar e contato, aprovar e reprovar pelo admin com conferência de versão, editar e reenviar com registro das edições e revisão pelo admin, e captação pelo admin com aceite do dono. 9 migrations, `testar_rls.sql` com 176 testes e e2e com 115 passando. Auditoria: corrigidos a troca de foto direto pelo Storage (crítico) e o aceite do captado sem conferir a versão; o resto foi para "Pendências"
 - 28/10/2026 · Gabriel · Etapa 5, passos 5.1 a 5.4: plano aprovado (CRECI com letra, remover corretor, convite por e-mail mostrando o link, convite por link de uso único, exclusão do autônomo pendente); tela Assinantes do admin (ativar, bloquear, desbloquear e excluir pendente com o usuário, liberando o CRECI) e cartão no painel; cadastro só com CRECI com a letra; teste do caminho do autônomo; tela Equipe (convidar por e-mail ou link, cancelar convite, remover corretor) e tela pública do convite, com o corretor entrando vinculado e ativo. 2 migrations (`creci_com_letra` e `convites_e_equipe`), `testar_rls.sql` com 198 testes e e2e com 149 passando. Falta a auditoria (5.5) e o fechamento (5.6)
 - 28/10/2026 · Gabriel · Etapa 5 concluída (5.5 e 5.6): auditoria sem nada crítico e todos os achados tratados. Migration `auditoria_etapa_5` (limite de 20 convites por hora por imobiliária, CRECI com 3 a 7 dígitos, equipe só para responsável com acesso), `idValido()`, admin sem contar removidos, aceite do convite recusando quem já está logado e `chamarAcao()` para a conexão que cai não derrubar a tela. Convite tomado por outra pessoa e as telas da Etapa 4 sem `chamarAcao()` foram para "Pendências" (Etapa 13). `testar_rls.sql` com 206 testes e e2e com 153 passando
+- 03/11/2026 · Gabriel · Decididos os filtros do catálogo (destrava a Etapa 6): tipo, bairro (vários ao mesmo tempo), faixa de preço, quartos mínimos e status, na URL; vagas, área, banheiros e ordenação ficam para depois do piloto. Registrado na Visão geral, no CLAUDE.md e no `docs/prompts.md`
