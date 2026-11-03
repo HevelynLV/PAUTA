@@ -105,7 +105,8 @@ test("admin capta para a dona; o imóvel só entra no catálogo quando ela aceit
 
   // O corretor ativo não vê o captado (fora do catálogo).
   const corretor = await entrarComo(email("corretor"));
-  const { data: visto } = await corretor.cliente.from("imoveis").select("id").eq("id", id);
+  // O assinante só vê imóveis pelas funções do catálogo (Etapa 6).
+  const { data: visto } = await corretor.cliente.rpc("imovel_do_catalogo", { p_imovel: id });
   expect(visto).toEqual([]);
 
   // A dona vê, lê e aceita.
@@ -131,7 +132,7 @@ test("admin capta para a dona; o imóvel só entra no catálogo quando ela aceit
   seisMeses.setUTCMonth(seisMeses.getUTCMonth() + 6);
   expect(Math.abs(new Date(depois.exclusividade_fim!).getTime() - seisMeses.getTime())).toBeLessThan(2 * 864e5);
   // Agora o corretor ativo vê.
-  const { data: vistoDepois } = await corretor.cliente.from("imoveis").select("id").eq("id", id);
+  const { data: vistoDepois } = await corretor.cliente.rpc("imovel_do_catalogo", { p_imovel: id });
   expect(vistoDepois).toHaveLength(1);
 });
 

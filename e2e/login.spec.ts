@@ -48,7 +48,7 @@ test("cada tipo entra e cai na tela certa", async ({ page, context }, info) => {
   const casos: [string, RegExp, string][] = [
     ["prop", /\/proprietario$/, "Olá, Marina Login"],
     ["admin", /\/admin$/, "Imóveis para aprovar"],
-    ["ativo", /\/assinante$/, "Olá, Thiago Ativo"],
+    ["ativo", /\/assinante$/, "Thiago Ativo"],
     ["pendente", /\/aguardando-ativacao$/, "Cadastro recebido, Rafael"],
     ["vencido", /\/acesso-suspenso$/, "A mensalidade da sua assinatura venceu."],
     ["bloqueado", /\/acesso-suspenso$/, "A equipe PAUTA bloqueou o acesso da sua assinatura."],
@@ -57,7 +57,7 @@ test("cada tipo entra e cai na tela certa", async ({ page, context }, info) => {
     await context.clearCookies();
     await entrar(page, email(conta));
     await expect(page, conta).toHaveURL(url);
-    await expect(page.getByText(texto).first(), conta).toBeVisible();
+    await expect(page.getByText(texto).filter({ visible: true }).first(), conta).toBeVisible();
   }
 });
 

@@ -150,6 +150,23 @@ as $$
   select id from public.bairros where nome = 'Bairro de Teste (roteiro)';
 $$;
 
+-- O tipo e o bairro de teste só são lidos: quem está logado como assinante
+-- não grava nas listas. Os imóveis (criados antes de entrar) já os criaram.
+-- (Usado pelo catálogo, que o assinante só lê pela função catalogo().)
+create or replace function pg_temp.id_tipo_teste()
+returns bigint
+language sql
+as $$
+  select id from public.tipos_imovel where nome = 'Tipo de Teste (roteiro)';
+$$;
+
+create or replace function pg_temp.id_bairro_teste()
+returns bigint
+language sql
+as $$
+  select id from public.bairros where nome = 'Bairro de Teste (roteiro)';
+$$;
+
 -- Cria um imóvel do dono p_dono já no status p_status (como o banco ficaria
 -- depois do cadastro e da aprovação). Devolve o id. Fora do rascunho, com o termo
 -- vigente aceito (a versão provisória da Etapa 4).
@@ -1378,13 +1395,13 @@ do $$ declare v text; n int; i uuid; begin
     perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'expirado');
     perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
-    select count(*)::text into v from public.imoveis;
+    select count(*)::text into v from public.catalogo(p_tipo => pg_temp.id_tipo_teste());
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
   end;
   insert into resultado (teste, esperado, obtido)
-  values ('Assinante ativo vê só o imóvel disponível (de 5 status diferentes)', '1', v);
+  values ('Assinante ativo vê só o imóvel disponível (de 5 status diferentes, pelo catálogo)', '1', v);
 end $$;
 
 do $$ declare v text; n int; i uuid; begin
@@ -3991,7 +4008,7 @@ do $$ declare v text; codigo text; i uuid; begin
     perform pg_temp.criar_corretor('00000000-0000-4000-a000-000000000021', codigo);
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000021');
     select public.eh_assinante_ativo()::text || ' / ' || count(*) into v
-    from public.imoveis where id = i;
+    from public.catalogo(p_tipo => pg_temp.id_tipo_teste()) where id = i;
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -4363,6 +4380,309 @@ do $$ declare v text; begin
   end;
   insert into resultado (teste, esperado, obtido)
   values ('Responsável de imobiliária bloqueada não lê a equipe', '0', v);
+end $$;
+
+-- ---------------------------------------------------------------
+-- 13. Catálogo do assinante (migration 20261103144204_catalogo)
+-- ---------------------------------------------------------------
+-- O catálogo é filtrado pelo tipo de teste do roteiro, para não contar imóveis
+-- reais nem os do e2e.
+
+-- Quantos imóveis do roteiro o catálogo mostra para quem está logado agora.
+create or replace function pg_temp.no_catalogo()
+returns text
+language sql
+as $$
+  select count(*)::text from public.catalogo(p_tipo => pg_temp.id_tipo_teste());
+$$;
+
+do $$ declare v text; d uuid; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'rascunho');
+    perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'pendente');
+    perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'reprovado');
+    perform pg_temp.criar_admin('00000000-0000-4000-a000-000000000009');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000009');
+    perform pg_temp.captar('00000000-0000-4000-a000-000000000001');
+    reset role;
+    perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'vendido');
+    perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'expirado');
+    d := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    select count(*)::text || ' / ' || coalesce(bool_and(id = d)::text, 'vazio') into v
+    from public.catalogo(p_tipo => pg_temp.id_tipo_teste());
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Catálogo: assinante ativo vê só o disponível (nem rascunho, pendente, reprovado, captado, vendido ou expirado)',
+          '1 / true', v);
+end $$;
+
+do $$ declare v text := ''; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'pendente');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := 'pendente ' || pg_temp.no_catalogo();
+    reset role;
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000031', 'bloqueado');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := v || ' / bloqueado ' || pg_temp.no_catalogo();
+    reset role;
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000031', 'vencido');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := v || ' / vencido ' || pg_temp.no_catalogo();
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000001');
+    v := v || ' / proprietario ' || pg_temp.no_catalogo();
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Catálogo vazio para assinante pendente, bloqueado e vencido e para proprietário',
+          'pendente 0 / bloqueado 0 / vencido 0 / proprietario 0', v);
+end $$;
+
+do $$ declare v text := ''; begin
+  begin
+    perform pg_temp.criar_imobiliaria('00000000-0000-4000-a000-000000000011', '12345-J');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'ativo');
+    perform pg_temp.criar_convite('00000000-0000-4000-a000-000000000011', 'codigo-de-teste', null, now() + interval '1 day');
+    perform pg_temp.criar_corretor('00000000-0000-4000-a000-000000000021', 'codigo-de-teste');
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000021');
+    v := 'ativo ' || pg_temp.no_catalogo();
+    reset role;
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'bloqueado');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000021');
+    v := v || ' / imobiliaria bloqueada ' || pg_temp.no_catalogo();
+    reset role;
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'ativo');
+    update public.perfis set removido_em = now() where id = '00000000-0000-4000-a000-000000000021';
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000021');
+    v := v || ' / removido ' || pg_temp.no_catalogo();
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Catálogo do corretor convidado some com a imobiliária bloqueada e quando ele é removido',
+          'ativo 1 / imobiliaria bloqueada 0 / removido 0', v);
+end $$;
+
+do $$ declare v text := ''; begin
+  begin
+    perform pg_temp.entrar_como_visitante();
+    begin
+      perform * from public.catalogo();
+      v := 'permitido';
+    exception when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    begin
+      perform * from public.imovel_do_catalogo('00000000-0000-4000-a000-000000000099');
+      v := v || ' / permitido';
+    exception when others then v := v || ' / ' || pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Visitante não chama o catálogo nem o detalhe', 'bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text := ''; d uuid; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    d := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    select count(*)::text into v from public.imoveis where id = d;
+    begin
+      perform public.status_no_catalogo(i) from public.imoveis i limit 1;
+      v := v || ' / permitido';
+    exception when others then v := v || ' / ' || pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Assinante ativo não lê a tabela imoveis direto nem chama status_no_catalogo (pendência da Etapa 2)',
+          '0 / bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; begin
+  select (pg_get_function_result('public.catalogo(bigint, bigint[], numeric, numeric, integer, text, integer, integer)'::regprocedure)
+          || pg_get_function_result('public.imovel_do_catalogo(uuid)'::regprocedure))
+         ~ '(proprietario|exclusividade|termo|captado|versao|mostrar_contato|telefone|email)'
+    into v;
+  insert into resultado (teste, esperado, obtido)
+  values ('Catálogo e detalhe não devolvem colunas internas nem o contato', 'false', v);
+end $$;
+
+do $$ declare v text := ''; d uuid; p uuid; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    d := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    p := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'pendente');
+    perform pg_temp.criar_foto(d, 1);
+    perform pg_temp.criar_foto(d, 2);
+    perform pg_temp.criar_foto(p, 1);
+    perform pg_temp.criar_arquivo(d, 'foto-1.jpg');
+    perform pg_temp.criar_arquivo(d, 'foto-1-mini.jpg');
+    perform pg_temp.criar_arquivo(p, 'foto-1.jpg');
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    select count(*)::text into v from public.fotos_imovel where imovel_id in (d, p);
+    v := v || ' / ' || (select count(*)::text from storage.objects
+                         where bucket_id = 'fotos-imoveis'
+                           and (storage.foldername(name))[1] in (d::text, p::text));
+    reset role;
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000031', 'bloqueado');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := v || ' / bloqueado ' || (select count(*)::text from public.fotos_imovel where imovel_id in (d, p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Assinante ativo vê fotos e arquivos só do imóvel do catálogo; bloqueado não vê',
+          '2 / 2 / bloqueado 0', v);
+end $$;
+
+do $$ declare v text := ''; d uuid; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    d := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    perform pg_temp.criar_foto(d, 2);
+    perform pg_temp.criar_foto(d, 1);
+    perform pg_temp.criar_foto(d, 3);
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    select (capa = d || '/foto-1.jpg')::text || ' / ' || total_fotos || ' / ' || status
+      into v from public.catalogo(p_tipo => pg_temp.id_tipo_teste());
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Catálogo traz a foto 1 como capa, o número de fotos e o status disponível',
+          'true / 3 / disponivel', v);
+end $$;
+
+do $$ declare v text := ''; d uuid; n uuid; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    d := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    n := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    update public.imoveis set tem_proposta_aceita = true where id = n;
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := (select string_agg(status, ',' order by status) from public.catalogo(p_tipo => pg_temp.id_tipo_teste()));
+    v := v || ' / ' || (select (bool_and(id = d))::text
+                        from public.catalogo(p_tipo => pg_temp.id_tipo_teste(), p_status => 'disponivel'));
+    v := v || ' / ' || (select (bool_and(id = n))::text
+                        from public.catalogo(p_tipo => pg_temp.id_tipo_teste(), p_status => 'em_negociacao'));
+    v := v || ' / ' || (select status from public.imovel_do_catalogo(n));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Status no catálogo: em negociação com proposta aceita, e o filtro de status separa os dois',
+          'disponivel,em_negociacao / true / true / em_negociacao', v);
+end $$;
+
+do $$ declare v text := ''; a uuid; b uuid; c uuid; outro bigint; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    a := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    b := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    c := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    insert into public.bairros (nome) values ('Outro Bairro de Teste (roteiro)') returning id into outro;
+    -- a: 300 mil, 0 quartos (terreno), bairro de teste
+    -- b: 500 mil, 2 quartos, outro bairro
+    -- c: 900 mil, 4 quartos, bairro de teste
+    update public.imoveis set preco = 300000, quartos = 0 where id = a;
+    update public.imoveis set preco = 500000, quartos = 2, bairro_id = outro where id = b;
+    update public.imoveis set preco = 900000, quartos = 4 where id = c;
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := 'bairro ' || (select count(*) from public.catalogo(p_tipo => pg_temp.id_tipo_teste(),
+                                                              p_bairros => array[pg_temp.id_bairro_teste()]));
+    v := v || ' / dois bairros ' || (select count(*) from public.catalogo(p_tipo => pg_temp.id_tipo_teste(),
+                                                              p_bairros => array[pg_temp.id_bairro_teste(), outro]));
+    v := v || ' / preco ' || (select count(*) from public.catalogo(p_tipo => pg_temp.id_tipo_teste(),
+                                                              p_preco_min => 400000, p_preco_max => 900000));
+    v := v || ' / 1+ quartos ' || (select count(*) from public.catalogo(p_tipo => pg_temp.id_tipo_teste(),
+                                                              p_quartos_min => 1));
+    v := v || ' / 4+ quartos ' || (select count(*) from public.catalogo(p_tipo => pg_temp.id_tipo_teste(),
+                                                              p_quartos_min => 4));
+    v := v || ' / outro tipo ' || (select count(*) from public.catalogo(
+                                     p_tipo => (select id from public.tipos_imovel
+                                                where id <> pg_temp.id_tipo_teste() limit 1),
+                                     p_bairros => array[pg_temp.id_bairro_teste(), outro]));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Filtros do catálogo: bairros, preço, quartos mínimos (sem quartos sai) e tipo',
+          'bairro 2 / dois bairros 3 / preco 2 / 1+ quartos 2 / 4+ quartos 1 / outro tipo 0', v);
+end $$;
+
+do $$ declare v text := ''; a uuid; b uuid; c uuid; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    a := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    b := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    c := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    update public.imoveis set exclusividade_inicio = now() - interval '3 days' where id = a;
+    update public.imoveis set exclusividade_inicio = now() - interval '1 day' where id = b;
+    update public.imoveis set exclusividade_inicio = now() - interval '2 days' where id = c;
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    -- Página 2 com 2 por página: só o mais antigo (a), e o total continua 3.
+    select (id = a)::text || ' / ' || total into v
+    from public.catalogo(p_tipo => pg_temp.id_tipo_teste(), p_limite => 2, p_deslocamento => 2);
+    -- Página 1: b (1 dia) antes de c (2 dias).
+    v := v || ' / ' || (select string_agg(case id when b then 'b' when c then 'c' else '?' end, ',')
+                        from public.catalogo(p_tipo => pg_temp.id_tipo_teste(), p_limite => 2));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Catálogo pagina com o total certo, do mais recente para o mais antigo', 'true / 3 / b,c', v);
+end $$;
+
+do $$ declare v text := ''; d uuid; p uuid; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    d := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    p := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'vendido');
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := (select endereco from public.imovel_do_catalogo(d));
+    v := v || ' / vendido ' || (select count(*) from public.imovel_do_catalogo(p));
+    reset role;
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000031', 'vencido');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    v := v || ' / vencido ' || (select count(*) from public.imovel_do_catalogo(d));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Detalhe: assinante ativo vê o endereço; imóvel vendido e assinante vencido não recebem nada',
+          'Rua de Teste, 100 / vendido 0 / vencido 0', v);
 end $$;
 
 -- ---------------------------------------------------------------
