@@ -108,6 +108,8 @@ As migrations são aplicadas pelo terminal, com a Supabase CLI (`npx supabase`, 
 - Ver o que já foi aplicado: `npx supabase migration list` (coluna Local = repositório, Remote = banco)
 - Depois de aplicar, rode o `supabase/testes/testar_rls.sql` inteiro no SQL Editor do painel: toda linha tem que mostrar "✅ passou". Só então siga para o próximo passo
 - Migration nova entra no "Atenção" e na lista "Migrations aplicadas no banco" do Roadmap, para avisar a outra pessoa
+- Aplicou uma migration? Faça o commit e o push do arquivo no mesmo dia. Se o banco tiver uma migration que não está no GitHub, o `db push` da outra pessoa trava (aconteceu em 03/11/2026 com a `20261029190825_equipe_exige_acesso`)
+- O plano gratuito do Supabase **pausa o projeto** depois de uns 7 dias sem uso: o `db push`, o `db query` e o app passam a dar "connection timeout". Abra o projeto no painel do Supabase e clique em "Restore project" (leva alguns minutos; os dados ficam)
 - **Nunca rode `npx supabase config push`.** O `supabase/config.toml` serve só para rodar o Supabase no próprio computador; esse comando copiaria essa configuração por cima da do projeto compartilhado (Site URL, login, e-mails)
 - **Nunca rode `npx supabase db reset --linked`**: ele apaga e recria o banco compartilhado inteiro. E `npx supabase db push --include-all` (aplica migrations mais antigas que a última aplicada) só com a outra pessoa sabendo
 
