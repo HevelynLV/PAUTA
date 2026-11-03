@@ -96,7 +96,8 @@ export async function entrarComo(email: string, senha = SENHA_TESTE) {
   };
 }
 
-// Apaga as contas de teste cujo e-mail começa com o prefixo. Assinante só pode
+// Apaga as contas de teste cujo e-mail começa com o prefixo (os corretores
+// primeiro). Assinante só pode
 // ser excluído pendente (RF16): antes, volta o status para pendente. Os imóveis
 // da conta vão antes (imoveis.proprietario_id não apaga em cascata), com os
 // arquivos das fotos no Storage.
@@ -104,7 +105,17 @@ export async function apagarContas(prefixo: string) {
   const admin = clienteAdmin();
   const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
   if (error) throw error;
-  for (const conta of data.users.filter((u) => u.email?.startsWith(prefixo))) {
+  const contas = data.users.filter((u) => u.email?.startsWith(prefixo));
+  // Corretores antes: o perfil do corretor aponta para o assinante da imobiliária,
+  // que só sai depois que nenhum perfil aponta mais para ele.
+  const { data: corretores } = await admin
+    .from("perfis")
+    .select("id")
+    .eq("tipo", "corretor")
+    .in("id", contas.map((conta) => conta.id));
+  const ehCorretor = new Set((corretores ?? []).map((perfil) => perfil.id));
+  contas.sort((a, b) => Number(ehCorretor.has(b.id)) - Number(ehCorretor.has(a.id)));
+  for (const conta of contas) {
     // Os arquivos das fotos não saem sozinhos com o imóvel: apaga a pasta de cada um.
     const { data: imoveis } = await admin.from("imoveis").select("id").eq("proprietario_id", conta.id);
     for (const { id } of imoveis ?? []) {

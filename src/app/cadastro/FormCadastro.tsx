@@ -60,7 +60,11 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
           <Campo
             name="creci"
             rotulo={perfil === "imobiliaria" ? "CRECI da imobiliária" : "Seu CRECI"}
-            dica="Só o número, ex.: 12345-J. Conferimos o CRECI à mão antes de ativar a assinatura."
+            dica={
+              perfil === "imobiliaria"
+                ? "O número com a letra J, ex.: 12345-J. Conferimos o CRECI à mão antes de ativar a assinatura."
+                : "O número com a letra F (pessoa física) ou J (empresa), ex.: 12345-F. Conferimos o CRECI à mão antes de ativar a assinatura."
+            }
             autoCapitalize="characters"
             defaultValue={valores.creci}
             erro={erros.creci}

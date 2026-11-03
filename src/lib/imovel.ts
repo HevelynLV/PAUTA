@@ -2,6 +2,8 @@
 // (supabase/migrations/20261022221614_imoveis.sql). O banco confere de novo: aqui
 // é só para a pessoa ver uma mensagem clara no campo certo.
 
+import { idValido } from "@/lib/validacao";
+
 export type CampoImovel =
   | "titulo"
   | "tipo_id"
@@ -156,5 +158,5 @@ export function caminhoDaMiniatura(caminho: string) {
 // O id do imóvel vem do endereço (ou de um campo que a pessoa pode alterar):
 // confere o formato antes de perguntar ao banco.
 export function idDeImovelValido(id: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  return idValido(id);
 }

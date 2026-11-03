@@ -6,6 +6,7 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 import {
   creciValido,
   emailValido,
+  erroDoCreci,
   limparCreci,
   limparTelefone,
   nomeValido,
@@ -64,7 +65,7 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
   if (perfil === "imobiliaria" && !nomeValido(valores.nome_imobiliaria)) {
     erros.nome_imobiliaria = "Escreva o nome da imobiliária.";
   }
-  if (assinante && !creciValido(creci)) erros.creci = "Escreva só o número do CRECI, ex.: 12345-J.";
+  if (perfil !== "proprietario" && !creciValido(creci, perfil)) erros.creci = erroDoCreci(creci, perfil);
   if (Object.keys(erros).length > 0) return { erros, valores };
 
   const supabase = await criarClienteServidor();

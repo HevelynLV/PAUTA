@@ -28,10 +28,33 @@ export function limparCreci(creci: string) {
     .replace(/[/-]?SC$/, "");
 }
 
-// Número (3 a 7 dígitos) com a letra opcional (J para imobiliária, F para pessoa
-// física), ao todo pelo menos 4 caracteres (assinantes_creci_formato).
-export function creciValido(creci: string) {
-  return /^\d{3,7}(-?[A-Z])?$/.test(creci) && creci.length >= 4;
+// Número (3 a 7 dígitos) com a letra obrigatória: J (empresa) ou F (pessoa física).
+// Imobiliária só com J; autônomo com J ou F (decisão de 28/10/2026; no banco,
+// assinantes_creci_com_letra e assinantes_imobiliaria_creci_j).
+export function creciValido(creci: string, perfil: "imobiliaria" | "autonomo") {
+  const letras = perfil === "imobiliaria" ? "J" : "JF";
+  return new RegExp(`^\\d{3,7}-?[${letras}]$`).test(creci);
+}
+
+// Mensagem do campo CRECI que explica o que faltou.
+export function erroDoCreci(creci: string, perfil: "imobiliaria" | "autonomo") {
+  if (perfil === "imobiliaria" && /^\d{3,7}-?F$/.test(creci)) {
+    return "Use o CRECI da imobiliária, com a letra J (ex.: 12345-J). CRECI com F é de pessoa física.";
+  }
+  if (/^\d{3,7}$/.test(creci)) {
+    return perfil === "imobiliaria"
+      ? "Falta a letra: escreva o CRECI com o J, ex.: 12345-J."
+      : "Falta a letra: escreva o CRECI com o F ou o J, ex.: 12345-F.";
+  }
+  return perfil === "imobiliaria"
+    ? "Escreva o número do CRECI com a letra J, ex.: 12345-J."
+    : "Escreva o número do CRECI com a letra F ou J, ex.: 12345-F.";
+}
+
+// Ids (uuid) que vêm do endereço ou de um campo que a pessoa pode alterar:
+// confere o formato antes de perguntar ao banco.
+export function idValido(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
 export function emailValido(email: string) {

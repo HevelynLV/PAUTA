@@ -11,8 +11,9 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 export const metadata: Metadata = { title: "Acesso suspenso" };
 
 // "Seu acesso está suspenso" (docs/prototipo/AcessoSuspenso.dc.html): assinante
-// com o pagamento vencido ou bloqueado pelo admin. O pagamento pelo app (Asaas) e
-// o contato da equipe entram na Etapa 11.
+// com o pagamento vencido ou bloqueado pelo admin, ou corretor removido da equipe
+// pelo responsável (decisão de 28/10/2026; o protótipo não tinha esse caso). O
+// pagamento pelo app (Asaas) e o contato da equipe entram na Etapa 11.
 export default function AcessoSuspenso() {
   return (
     <div className="flex flex-1 flex-col bg-bg">
@@ -40,6 +41,8 @@ async function Conteudo() {
     .select("tipo, nome, bloqueado_pelo_admin")
     .eq("id", usuario.assinanteId!)
     .maybeSingle();
+
+  if (assinatura?.removido) return <Removido imobiliaria={assinante?.nome ?? "imobiliária"} />;
 
   const bloqueado = assinante?.bloqueado_pelo_admin === true;
   const deQuem = assinante?.tipo === "imobiliaria" ? `da ${assinante.nome}` : "da sua assinatura";
@@ -84,6 +87,37 @@ async function Conteudo() {
           Corretor convidado? Quem resolve é o responsável pela imobiliária.
         </p>
       )}
+    </div>
+  );
+}
+
+// Corretor removido da equipe: o vínculo fica como histórico, então ele não volta
+// para outra imobiliária com esta conta (decisão de 28/10/2026).
+function Removido({ imobiliaria }: { imobiliaria: string }) {
+  return (
+    <div className="mx-auto flex w-full max-w-[440px] flex-col gap-5 px-5 pb-7 pt-5">
+      <div className="flex flex-col gap-3">
+        <span className="flex size-14 items-center justify-center rounded-cartao bg-erro-soft text-erro">
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.8]">
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+        </span>
+        <h1 className="font-display text-t1 font-bold leading-[1.1] tracking-[-0.02em]">
+          Você não faz mais parte da equipe
+        </h1>
+        <p className="text-ink2">
+          O responsável pela {imobiliaria} removeu você da equipe. Esta conta não acessa mais o catálogo.
+        </p>
+      </div>
+
+      <Cartao className="gap-1.5">
+        <b>Vai trabalhar com outra imobiliária?</b>
+        <span className="text-small text-ink2">
+          Peça o convite a ela e crie uma conta nova pelo link, com outro e-mail. Esta conta continua ligada à{" "}
+          {imobiliaria}.
+        </span>
+      </Cartao>
     </div>
   );
 }

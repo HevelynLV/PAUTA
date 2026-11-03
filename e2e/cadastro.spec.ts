@@ -87,6 +87,49 @@ test("CRECI repetido, mesmo escrito de outro jeito, dá mensagem clara", async (
   expect(await contaPorEmail(email)).toBeNull();
 });
 
+// Decisão de 28/10/2026: CRECI com a letra; imobiliária só com J, autônomo com J ou F.
+test("CRECI sem letra, ou com F na imobiliária, é recusado no campo, sem criar conta", async ({ page }) => {
+  const numero = unico();
+  const email = `${PREFIXO}letra-${numero}@exemplo.com`;
+
+  await page.goto("/cadastro/imobiliaria");
+  await page.getByLabel("Nome da imobiliária").fill("Maré Sem Letra E2E");
+  await page.getByLabel("Nome do responsável").fill("Rafael Teste E2E");
+  await page.getByLabel("E-mail").fill(email);
+  await page.getByLabel("Telefone com DDD").fill("48 99654-2201");
+
+  await page.getByLabel("CRECI da imobiliária").fill(numero);
+  await page.getByLabel("Senha").fill("senha-e2e-123");
+  await page.getByRole("button", { name: "Criar conta" }).click();
+  await expect(page.getByText("Falta a letra: escreva o CRECI com o J, ex.: 12345-J.")).toBeVisible();
+
+  await page.getByLabel("CRECI da imobiliária").fill(`${numero}-F`);
+  await page.getByLabel("Senha").fill("senha-e2e-123");
+  await page.getByRole("button", { name: "Criar conta" }).click();
+  await expect(page.getByText("Use o CRECI da imobiliária, com a letra J")).toBeVisible();
+  expect(await contaPorEmail(email)).toBeNull();
+
+  // O autônomo pode usar F.
+  await page.goto("/cadastro/autonomo");
+  await page.getByLabel("Seu CRECI").fill(numero);
+  await page.getByLabel("Nome completo").fill("Thiago Teste E2E");
+  await page.getByLabel("E-mail").fill(email);
+  await page.getByLabel("Telefone com DDD").fill("48 99111-2233");
+  await page.getByLabel("Senha").fill("senha-e2e-123");
+  await page.getByRole("button", { name: "Criar conta" }).click();
+  await expect(page.getByText("Falta a letra: escreva o CRECI com o F ou o J, ex.: 12345-F.")).toBeVisible();
+  expect(await contaPorEmail(email)).toBeNull();
+
+  await page.getByLabel("Seu CRECI").fill(`${numero}-f`);
+  await page.getByLabel("Senha").fill("senha-e2e-123");
+  await page.getByRole("button", { name: "Criar conta" }).click();
+  await expect(page).toHaveURL(/\/aguardando-ativacao$/);
+  expect(await perfilPorEmail(email)).toMatchObject({
+    tipo: "autonomo",
+    assinantes: { tipo: "autonomo", creci: `${numero}-F`, status: "pendente" },
+  });
+});
+
 test("campos vazios ou errados mostram o erro no campo, sem criar conta", async ({ page }) => {
   await page.goto("/cadastro");
   await page.getByLabel("Telefone com DDD").fill("9999-0000");

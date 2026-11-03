@@ -14,7 +14,7 @@ type Moldura = {
 };
 
 const classesCaixa = (erro?: string) =>
-  `min-h-12 w-full rounded-botao border bg-card px-3.5 text-ink focus:outline-2 focus:outline-offset-1 focus:outline-mar ${
+  `min-h-12 w-full rounded-botao border bg-card px-3.5 text-ink read-only:bg-cinza-soft read-only:text-ink2 focus:outline-2 focus:outline-offset-1 focus:outline-mar ${
     erro ? "border-erro" : "border-line"
   }`;
 

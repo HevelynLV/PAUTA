@@ -22,21 +22,21 @@ export const menuProprietario: MenusDaArea = {
   ],
 };
 
-// Imobiliária, corretor autônomo e corretor convidado. "Equipe" (só para o
-// responsável da imobiliária) entra na Etapa 5.
+// Imobiliária, corretor autônomo e corretor convidado. A Equipe (só para o
+// responsável da imobiliária, passo 5.4) abre por Minha conta, como no protótipo.
 export const menuAssinante: MenusDaArea = {
   rotulo: "Menu do corretor",
   celular: [
     { href: "/assinante", rotulo: "Catálogo", icone: "catalogo" }, // Etapa 6
     { href: "/assinante/negociacoes", rotulo: "Negociações", icone: "negociacoes" }, // Etapa 8
     { href: "/assinante/avisos", rotulo: "Avisos", icone: "avisos" }, // Etapa 10
-    { href: "/assinante/conta", rotulo: "Conta", icone: "conta" }, // passo 3.5
+    { href: "/assinante/conta", rotulo: "Conta", icone: "conta", tambem: ["/assinante/equipe"] }, // passo 3.5
   ],
   computador: [
     { href: "/assinante", rotulo: "Catálogo", icone: "catalogo" },
     { href: "/assinante/negociacoes", rotulo: "Negociações", icone: "negociacoes" },
     { href: "/assinante/avisos", rotulo: "Avisos", icone: "avisos" },
-    { href: "/assinante/conta", rotulo: "Minha conta", icone: "conta" },
+    { href: "/assinante/conta", rotulo: "Minha conta", icone: "conta", tambem: ["/assinante/equipe"] },
   ],
 };
 

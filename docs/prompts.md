@@ -33,7 +33,7 @@ Me dê 2 ou 3 opções, com o impacto de cada uma no código, no custo e no pilo
 | --- | --- |
 | ~~Como aplicar as migrations~~: decidido em 20/10/2026, `supabase db push` | 1 |
 | Texto do termo de exclusividade: a Etapa 4 usa um texto provisório (decidido em 26/10/2026); o final entra antes do piloto | 13 |
-| Filtros do catálogo | 6 |
+| ~~Filtros do catálogo~~: decidido em 03/11/2026, tipo, bairro (vários), preço, quartos e status | 6 |
 | % da comissão do PAUTA | 9 |
 | Provedor do WhatsApp e custo por mensagem | 10 |
 | Preço da mensalidade | 11 |
@@ -360,7 +360,7 @@ Me entregue o plano em passos pequenos, as mudanças no banco, os riscos e as su
 **5.2 Admin e assinantes**
 
 ```text
-Faça a área do admin para assinantes: lista de pendentes com o CRECI em destaque (o admin confere à mão), ativar e bloquear (RF15), e excluir imobiliária pendente com o usuário dela, liberando o CRECI (RF16). Bloquear tem efeito na hora, também para os corretores da imobiliária. No fim, teste Playwright.
+Faça a área do admin para assinantes: lista de pendentes com o CRECI em destaque (o admin confere à mão), ativar e bloquear (RF15), e excluir imobiliária ou autônomo pendente com o usuário dele, liberando o CRECI (RF16). Bloquear tem efeito na hora, também para os corretores da imobiliária. No fim, teste Playwright.
 ```
 
 **5.3 Corretor autônomo**

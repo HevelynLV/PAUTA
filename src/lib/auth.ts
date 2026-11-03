@@ -32,8 +32,9 @@ type StatusAssinatura = "pendente" | "ativo" | "vencido";
 
 type LeituraDaSessao = {
   usuario: Usuario;
-  // Só para assinantes: se tem acesso (ativo e não bloqueado) e o status.
-  assinatura: { temAcesso: boolean; status: StatusAssinatura } | null;
+  // Só para assinantes: se tem acesso (ativo, não bloqueado e, para o corretor,
+  // não removido da equipe), o status e se o corretor foi removido.
+  assinatura: { temAcesso: boolean; status: StatusAssinatura; removido: boolean } | null;
 } | null;
 
 export function ehAssinante(tipo: TipoUsuario) {
@@ -62,7 +63,7 @@ const lerSessao = cache(async (): Promise<LeituraDaSessao> => {
   // não estar logado.
   const { data: perfil } = await supabase
     .from("perfis")
-    .select("tipo, nome, assinante_id")
+    .select("tipo, nome, assinante_id, removido_em")
     .eq("id", id)
     .maybeSingle();
   if (!perfil) return null;
@@ -79,7 +80,7 @@ const lerSessao = cache(async (): Promise<LeituraDaSessao> => {
 
   // Assinante sem assinatura não deveria existir (o banco exige), mas, se
   // existir, fica sem acesso em vez de passar.
-  if (!usuario.assinanteId) return { usuario, assinatura: { temAcesso: false, status: "pendente" } };
+  if (!usuario.assinanteId) return { usuario, assinatura: { temAcesso: false, status: "pendente", removido: false } };
 
   // A regra do acesso fica só no banco (eh_assinante_ativo: ativo e não
   // bloqueado; o corretor segue a imobiliária). O status serve só para escolher
@@ -94,6 +95,7 @@ const lerSessao = cache(async (): Promise<LeituraDaSessao> => {
     assinatura: {
       temAcesso: temAcesso === true,
       status: (assinante?.status ?? "pendente") as StatusAssinatura,
+      removido: perfil.removido_em !== null,
     },
   };
 });
@@ -134,8 +136,8 @@ export async function assinaturaAtual() {
  *
  * - Sem login: vai para /entrar.
  * - Logado, mas de outro tipo: vai para a área do próprio tipo.
- * - Assinante sem acesso (pendente, vencido ou bloqueado): vai para
- *   /aguardando-ativacao (pendente) ou /acesso-suspenso (vencido ou bloqueado).
+ * - Assinante sem acesso (pendente, vencido, bloqueado ou corretor removido):
+ *   vai para /aguardando-ativacao (pendente) ou /acesso-suspenso (os outros).
  *   As duas telas usam { assinaturaAtiva: false } para não cair em laço.
  *
  * redirect() interrompe a página ou a action: nada depois da chamada roda.
