@@ -12,7 +12,7 @@ function plural(n: number, um: string, varios: string) {
   return `${n} ${n === 1 ? um : varios}`;
 }
 
-export function resumoDoImovel(imovel: Pick<ImovelNoCatalogo, "quartos" | "vagas" | "area">) {
+function resumoDoImovel(imovel: Pick<ImovelNoCatalogo, "quartos" | "vagas" | "area">) {
   return [
     imovel.quartos > 0 && plural(imovel.quartos, "quarto", "quartos"),
     imovel.vagas > 0 && plural(imovel.vagas, "vaga", "vagas"),
@@ -22,11 +22,11 @@ export function resumoDoImovel(imovel: Pick<ImovelNoCatalogo, "quartos" | "vagas
 
 // prioridade: os primeiros cards da página carregam a foto na hora; os outros, só
 // quando chegam perto da tela (economiza dados na rede móvel, RNF14).
-export function CardDoCatalogo({ imovel, prioridade = false }: { imovel: ImovelNoCatalogo; prioridade?: boolean }) {
+export function CardDoCatalogo({ imovel, href, prioridade = false }: { imovel: ImovelNoCatalogo; href: string; prioridade?: boolean }) {
   return (
     <li>
       <Link
-        href={`/assinante/imoveis/${imovel.id}`}
+        href={href}
         className="flex h-full flex-col overflow-hidden rounded-cartao border border-line bg-card text-ink no-underline md:rounded-pcard md:hover:border-mar"
       >
         <div className="relative flex h-[150px] items-end justify-between bg-[#BFD3CD] p-3 md:h-[180px] md:items-start">

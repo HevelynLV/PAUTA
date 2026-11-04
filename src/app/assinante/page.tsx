@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { CardDoCatalogo } from "@/components/catalogo/CardDoCatalogo";
@@ -7,7 +8,7 @@ import { FiltrosDoCatalogo } from "@/components/catalogo/FiltrosDoCatalogo";
 import { Paginacao } from "@/components/catalogo/Paginacao";
 import { exigirTipo, TIPOS_ASSINANTE } from "@/lib/auth";
 import { buscarCatalogo, nomeDoAssinante } from "@/lib/catalogo";
-import { filtrosDaFolhaAtivos, lerFiltros, urlDoCatalogo } from "@/lib/filtrosCatalogo";
+import { filtrosDaFolhaAtivos, lerFiltros, urlDoCatalogo, urlDoImovel } from "@/lib/filtrosCatalogo";
 import { listasDoImovel } from "@/lib/imoveis";
 
 export const metadata: Metadata = { title: "Catálogo" };
@@ -36,6 +37,9 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
     listasDoImovel(),
     nomeDoAssinante(usuario.assinanteId),
   ]);
+  // Página que não existe (link antigo, ou imóveis saíram do catálogo): sem linhas
+  // não dá para saber o total, e "0 imóveis" seria mentira. Volta para a primeira.
+  if (imoveis.length === 0 && filtros.pagina > 1) redirect(urlDoCatalogo(filtros, { pagina: 1 }));
 
   const tipos = [
     { rotulo: "Todos", href: urlDoCatalogo(filtros, { tipo: null }), ativo: filtros.tipo === null },
@@ -83,22 +87,16 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
           {imoveis.length > 0 ? (
             <ul className="grid gap-3.5 md:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] md:gap-5">
               {imoveis.map((imovel, i) => (
-                <CardDoCatalogo key={imovel.id} imovel={imovel} prioridade={i < CARDS_PRIORITARIOS} />
+                <CardDoCatalogo key={imovel.id} imovel={imovel} href={urlDoImovel(imovel.id, filtros)} prioridade={i < CARDS_PRIORITARIOS} />
               ))}
             </ul>
           ) : (
             <div className="flex flex-col items-center gap-3 py-[30px] text-center md:py-12">
               <p className="text-small text-ink2 md:text-corpo">Nenhum imóvel com esses filtros.</p>
-              {filtros.pagina > 1 ? (
-                <Link href={urlDoCatalogo(filtros, { pagina: 1 })} className="text-small font-bold text-mar">
-                  Voltar para a primeira página
+              {busca !== "/assinante" && (
+                <Link href="/assinante" className="text-small font-bold text-mar">
+                  Ver o catálogo inteiro
                 </Link>
-              ) : (
-                busca !== "/assinante" && (
-                  <Link href="/assinante" className="text-small font-bold text-mar">
-                    Ver o catálogo inteiro
-                  </Link>
-                )
               )}
             </div>
           )}

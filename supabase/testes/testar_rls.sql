@@ -189,6 +189,14 @@ as $$
   returning id;
 $$;
 
+-- Quantos imóveis do roteiro o catálogo mostra para quem está logado agora.
+create or replace function pg_temp.no_catalogo()
+returns text
+language sql
+as $$
+  select count(*)::text from public.catalogo(p_tipo => pg_temp.id_tipo_teste());
+$$;
+
 -- Põe uma foto no imóvel p_imovel, na posição p_ordem, com o papel de quem está
 -- agindo (dono, admin ou o próprio roteiro).
 create or replace function pg_temp.criar_foto(p_imovel uuid, p_ordem int)
@@ -1414,7 +1422,7 @@ do $$ declare v text; n int; i uuid; begin
     perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'expirado');
     perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'pendente');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
-    select count(*)::text into v from public.imoveis;
+    v := pg_temp.no_catalogo();
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -1433,7 +1441,7 @@ do $$ declare v text; n int; i uuid; begin
     perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'expirado');
     perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'bloqueado');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
-    select count(*)::text into v from public.imoveis;
+    v := pg_temp.no_catalogo();
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -1452,7 +1460,7 @@ do $$ declare v text; n int; i uuid; begin
     perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'expirado');
     perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'vencido');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
-    select count(*)::text into v from public.imoveis;
+    v := pg_temp.no_catalogo();
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -1475,7 +1483,7 @@ do $$ declare v text; n int; i uuid; begin
     perform pg_temp.criar_corretor('00000000-0000-4000-a000-000000000021', 'codigo-de-teste');
     perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'bloqueado');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000021');
-    select count(*)::text into v from public.imoveis;
+    v := pg_temp.no_catalogo();
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -4388,14 +4396,6 @@ end $$;
 -- O catálogo é filtrado pelo tipo de teste do roteiro, para não contar imóveis
 -- reais nem os do e2e.
 
--- Quantos imóveis do roteiro o catálogo mostra para quem está logado agora.
-create or replace function pg_temp.no_catalogo()
-returns text
-language sql
-as $$
-  select count(*)::text from public.catalogo(p_tipo => pg_temp.id_tipo_teste());
-$$;
-
 do $$ declare v text; d uuid; begin
   begin
     perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
@@ -4683,6 +4683,109 @@ do $$ declare v text := ''; d uuid; p uuid; begin
   insert into resultado (teste, esperado, obtido)
   values ('Detalhe: assinante ativo vê o endereço; imóvel vendido e assinante vencido não recebem nada',
           'Rua de Teste, 100 / vendido 0 / vencido 0', v);
+end $$;
+
+-- ---------------------------------------------------------------
+-- 14. Auditoria da Etapa 6 (migrations 20261029190825_equipe_exige_acesso e
+--     20261104155834_auditoria_etapa_6)
+-- ---------------------------------------------------------------
+
+do $$ declare v text; n int; begin
+  begin
+    perform pg_temp.criar_imobiliaria('00000000-0000-4000-a000-000000000011', '12345-J');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'ativo');
+    perform pg_temp.criar_convite('00000000-0000-4000-a000-000000000011', 'codigo-de-teste', 'x@exemplo.com', now() + interval '1 day');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'bloqueado');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000011');
+    select count(*)::text into v from public.convites;
+    delete from public.convites;
+    get diagnostics n = row_count;
+    v := v || ' / ' || n;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Responsável de imobiliária bloqueada não lê nem cancela convites', '0 / 0', v);
+end $$;
+
+do $$ declare v text; n int; begin
+  begin
+    perform pg_temp.criar_imobiliaria('00000000-0000-4000-a000-000000000011', '12345-J');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'ativo');
+    perform pg_temp.criar_convite('00000000-0000-4000-a000-000000000011', 'codigo-de-teste', 'x@exemplo.com', now() + interval '1 day');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'vencido');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000011');
+    select count(*)::text into v from public.convites;
+    delete from public.convites;
+    get diagnostics n = row_count;
+    v := v || ' / ' || n;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Responsável de imobiliária vencida não lê nem cancela convites', '0 / 0', v);
+end $$;
+
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_imobiliaria('00000000-0000-4000-a000-000000000011', '12345-J');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'ativo');
+    perform pg_temp.criar_convite('00000000-0000-4000-a000-000000000011', 'codigo-de-teste', null, now() + interval '1 day');
+    perform pg_temp.criar_corretor('00000000-0000-4000-a000-000000000021', 'codigo-de-teste');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'bloqueado');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000011');
+    begin
+      perform public.remover_corretor('00000000-0000-4000-a000-000000000021');
+      v := 'permitido';
+    exception when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Responsável de imobiliária bloqueada não remove corretor', 'bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_imobiliaria('00000000-0000-4000-a000-000000000011', '12345-J');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'ativo');
+    perform pg_temp.criar_convite('00000000-0000-4000-a000-000000000011', 'codigo-de-teste', null, now() + interval '1 day');
+    perform pg_temp.criar_corretor('00000000-0000-4000-a000-000000000021', 'codigo-de-teste');
+    perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000011', 'vencido');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000011');
+    begin
+      perform public.remover_corretor('00000000-0000-4000-a000-000000000021');
+      v := 'permitido';
+    exception when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Responsável de imobiliária vencida não remove corretor', 'bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    for i in 1..50 loop
+      perform pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
+    end loop;
+    perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
+    select count(*) || ' / ' || max(c.total) into v
+    from public.catalogo(p_tipo => pg_temp.id_tipo_teste(), p_limite => 1000) c;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Catálogo devolve no máximo 48 imóveis por pedido, com o total certo', '48 / 50', v);
 end $$;
 
 -- ---------------------------------------------------------------

@@ -90,6 +90,13 @@ export function urlDoCatalogo(f: FiltrosCatalogo, mudar: Partial<FiltrosCatalogo
   return texto ? `/assinante?${texto}` : "/assinante";
 }
 
+// Endereço do imóvel levando a busca junto: a volta ao catálogo cai nos mesmos
+// filtros e na mesma página.
+export function urlDoImovel(id: string, f: FiltrosCatalogo) {
+  const [, busca] = urlDoCatalogo(f, { pagina: f.pagina }).split("?");
+  return busca ? `/assinante/imoveis/${id}?${busca}` : `/assinante/imoveis/${id}`;
+}
+
 // Quantos filtros da folha (bairro, preço, quartos) estão ligados, para o botão
 // "Filtros" do celular mostrar que há algo escolhido lá dentro.
 export function filtrosDaFolhaAtivos(f: FiltrosCatalogo) {

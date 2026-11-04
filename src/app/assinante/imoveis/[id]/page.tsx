@@ -8,6 +8,7 @@ import { SeloStatus } from "@/components/ui/SeloStatus";
 import { exigirTipo, TIPOS_ASSINANTE } from "@/lib/auth";
 import { type ImovelDoCatalogo, imovelDoCatalogo } from "@/lib/catalogo";
 import { formatarTelefone } from "@/lib/conta";
+import { lerFiltros, urlDoCatalogo } from "@/lib/filtrosCatalogo";
 import { formatarPreco } from "@/lib/imovel";
 
 export const metadata: Metadata = { title: "Imóvel" };
@@ -19,19 +20,26 @@ export const metadata: Metadata = { title: "Imóvel" };
 //
 // O contato do proprietário (RNF06) só existe aqui se o banco o devolveu: ele é
 // montado no servidor e, quando está escondido, nada dele chega ao navegador.
-export default function DetalheDoImovel({ params }: PageProps<"/assinante/imoveis/[id]">) {
+export default function DetalheDoImovel({ params, searchParams }: PageProps<"/assinante/imoveis/[id]">) {
   return (
     <Suspense fallback={<p className="px-5 pt-[22px] text-ink2 md:px-10 md:pt-8">Carregando o imóvel…</p>}>
-      <Conteudo params={params} />
+      <Conteudo params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-const VOLTAR = "/assinante";
-
-async function Conteudo({ params }: { params: Promise<{ id: string }> }) {
+async function Conteudo({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await exigirTipo(TIPOS_ASSINANTE);
   const { id } = await params;
+  // A busca veio junto do card. Passa por lerFiltros: o voltar nunca leva para fora.
+  const filtros = lerFiltros(await searchParams);
+  const voltar = urlDoCatalogo(filtros, { pagina: filtros.pagina });
   const imovel = await imovelDoCatalogo(id);
   if (!imovel) notFound();
 
@@ -41,7 +49,7 @@ async function Conteudo({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="flex w-full max-w-[1140px] flex-col pb-6 md:gap-6 md:px-10 md:pb-10 md:pt-8">
       <nav aria-label="Caminho" className="hidden items-center gap-2 text-small text-ink2 md:flex">
-        <Link href={VOLTAR} className="font-semibold text-mar">
+        <Link href={voltar} className="font-semibold text-mar">
           Catálogo
         </Link>
         <span aria-hidden="true">/</span>
@@ -50,7 +58,7 @@ async function Conteudo({ params }: { params: Promise<{ id: string }> }) {
 
       <GaleriaDoImovel
         titulo={imovel.titulo}
-        voltar={VOLTAR}
+        voltar={voltar}
         fotos={imovel.fotos.map((foto) => ({ id: foto.id, miniatura: foto.miniatura, grande: foto.grande ?? null }))}
       />
 
@@ -92,14 +100,18 @@ async function Conteudo({ params }: { params: Promise<{ id: string }> }) {
 }
 
 function Numeros({ imovel }: { imovel: ImovelDoCatalogo }) {
+  // Como no card: o que é zero (um terreno não tem quartos) não aparece.
+  const contagens = [
+    { valor: imovel.quartos, rotulo: imovel.quartos === 1 ? "quarto" : "quartos" },
+    { valor: imovel.banheiros, rotulo: imovel.banheiros === 1 ? "banheiro" : "banheiros" },
+    { valor: imovel.vagas, rotulo: imovel.vagas === 1 ? "vaga" : "vagas" },
+  ];
   const itens = [
-    { valor: String(imovel.quartos), rotulo: imovel.quartos === 1 ? "quarto" : "quartos" },
-    { valor: String(imovel.banheiros), rotulo: imovel.banheiros === 1 ? "banheiro" : "banheiros" },
-    { valor: String(imovel.vagas), rotulo: imovel.vagas === 1 ? "vaga" : "vagas" },
+    ...contagens.filter((item) => item.valor > 0).map((item) => ({ ...item, valor: String(item.valor) })),
     { valor: `${imovel.area.toLocaleString("pt-BR")} m²`, rotulo: "área" },
   ];
   return (
-    <dl className="grid grid-cols-4 gap-2 rounded-cartao border border-line bg-card p-4 md:gap-3">
+    <dl className="grid auto-cols-fr grid-flow-col gap-2 rounded-cartao border border-line bg-card p-4 md:gap-3">
       {itens.map((item) => (
         <div key={item.rotulo} className="flex flex-col">
           <dt className="order-2 text-tiny text-ink2">{item.rotulo}</dt>
@@ -150,7 +162,8 @@ function Contato({ contato }: { contato: ImovelDoCatalogo["contato"] }) {
       foraDoPauta: true,
     },
     {
-      href: `mailto:${contato.email}`,
+      // O e-mail vai escapado: um "?" nele não pode virar parâmetro do link.
+      href: `mailto:${encodeURIComponent(contato.email).replace("%40", "@")}`,
       rotulo: "E-mail",
       detalhe: contato.email,
       desenho: (

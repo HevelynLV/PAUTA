@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
+import { pngDeTeste } from "./apoio/imagens";
 import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura } from "./apoio/supabase";
 
 // Detalhe do imóvel para o corretor, passo 6.3 (RF18 a RF20, RNF06): galeria,
@@ -26,10 +27,11 @@ const imoveis = {} as Record<"escondido" | "divulgado" | "vendido", string>;
 const pedacosDoContato = [TELEFONE_DO_DONO, "99999-0070", "999990070", email("dono")];
 
 async function porFoto(imovelId: string, nome: string, ordem: number) {
-  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  // Imagem de verdade: a galeria troca de endereço quando a foto não abre.
+  const imagem = pngDeTeste(8, 6, [90, 140, 130]);
   const balde = sessoes.dono.cliente.storage.from(BALDE);
   for (const arquivo of [`${nome}.jpg`, `${nome}-mini.jpg`]) {
-    const { error } = await balde.upload(`${imovelId}/${arquivo}`, jpeg, { contentType: "image/jpeg" });
+    const { error } = await balde.upload(`${imovelId}/${arquivo}`, imagem, { contentType: "image/jpeg" });
     if (error) throw error;
   }
   const { error } = await clienteAdmin().from("fotos_imovel").insert({ imovel_id: imovelId, caminho: `${imovelId}/${nome}.jpg`, ordem });
@@ -114,13 +116,17 @@ test("o corretor abre o imóvel pelo catálogo e vê fotos, dados, endereço e s
   const page = await paginaDe(browser, "ativo");
   await page.goto(`/assinante?${FAIXA}`);
   await page.getByRole("link", { name: /Casa detalhe com contato escondido/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/assinante/imoveis/${imoveis.escondido}$`));
+  await expect(page).toHaveURL(new RegExp(`/assinante/imoveis/${imoveis.escondido}\\?${FAIXA}$`));
 
   await expect(page.getByRole("heading", { level: 1, name: "Casa detalhe com contato escondido" })).toBeVisible();
   const principal = page.getByRole("main");
   await expect(principal.getByText("R$ 7.772.100").filter({ visible: true })).toBeVisible();
   await expect(principal.getByText("Rua das Gaivotas, 210 · Campeche · Florianópolis").filter({ visible: true })).toBeVisible();
   await expect(principal.getByText("Disponível").filter({ visible: true })).toBeVisible();
+  // Nada da página passa da largura do celular.
+  if (test.info().project.name === "celular") {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  }
   await expect(principal.getByText("Exclusivo PAUTA").filter({ visible: true })).toBeVisible();
   await expect(principal.getByText("Quintal com piscina.", { exact: false }).filter({ visible: true })).toBeVisible();
   for (const [valor, rotulo] of [["4", "quartos"], ["3", "banheiros"], ["2", "vagas"], ["220 m²", "área"]]) {
@@ -136,7 +142,7 @@ test("o corretor abre o imóvel pelo catálogo e vê fotos, dados, endereço e s
     ? page.getByRole("link", { name: "Voltar ao catálogo" })
     : page.getByRole("navigation", { name: "Caminho" }).getByRole("link", { name: "Catálogo" });
   await voltar.click();
-  await expect(page).toHaveURL(/\/assinante$/);
+  await expect(page).toHaveURL(new RegExp(`/assinante\\?${FAIXA}$`));
 });
 
 test("galeria: a foto abre grande em tela cheia, com Próxima e Fechar", async ({ browser }) => {
@@ -163,6 +169,35 @@ test("galeria: a foto abre grande em tela cheia, com Próxima e Fechar", async (
   await expect(janela.getByText("1 / 2")).toBeVisible();
   await janela.getByRole("button", { name: "Fechar as fotos" }).click();
   await expect(janela).toBeHidden();
+});
+
+// Abre a tela cheia na primeira foto, no celular ou no computador.
+async function abrirFotos(page: Page) {
+  const titulo = "Casa detalhe com contato escondido";
+  if (test.info().project.name === "celular") {
+    await page.getByRole("button", { name: `Foto 1 de 2: ${titulo}. Abrir a foto grande` }).click();
+  } else {
+    await page.getByRole("button", { name: "Ver as 2 fotos" }).click();
+  }
+  return page.getByRole("dialog", { name: `Fotos: ${titulo}` });
+}
+
+test("galeria: se a foto grande não abre, mostra a miniatura", async ({ browser }) => {
+  const page = await paginaDe(browser, "ativo");
+  await page.route(/\/fachada\.jpg\?/, (rota) => rota.abort());
+  await page.goto(`/assinante/imoveis/${imoveis.escondido}`);
+  const janela = await abrirFotos(page);
+  await expect(janela.getByRole("img")).toHaveAttribute("src", /\/fachada-mini\.jpg\?/);
+});
+
+test("galeria: se nenhum link abre (página aberta há muito tempo), avisa em vez de ficar vazia", async ({ browser }) => {
+  const page = await paginaDe(browser, "ativo");
+  await page.route(/\/fachada(-mini)?\.jpg\?/, (rota) => rota.abort());
+  await page.goto(`/assinante/imoveis/${imoveis.escondido}`);
+  const janela = await abrirFotos(page);
+  await expect(janela.getByText("Esta foto não abriu. Atualize a página e tente de novo.")).toBeVisible();
+  await janela.getByRole("button", { name: "Próxima foto" }).click();
+  await expect(janela.getByRole("img")).toHaveAttribute("src", /\/sala\.jpg\?/);
 });
 
 test("contato escondido: o cartão aparece e nada do contato chega ao navegador (HTML, dados do Next e API)", async ({ browser }) => {

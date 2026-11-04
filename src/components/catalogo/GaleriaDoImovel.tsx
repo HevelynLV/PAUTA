@@ -174,8 +174,11 @@ function Visualizador({
   const janela = useRef<HTMLDialogElement>(null);
   const total = fotos.length;
   const foto = fotos[i];
-  // A grande; se o link dela faltar, a miniatura.
-  const endereco = foto?.grande ?? foto?.miniatura ?? null;
+  // Quantos endereços de cada foto já falharam (ex.: página aberta há mais de 1 hora,
+  // com o link vencido). Primeiro a grande; se não abrir, a miniatura; senão, o aviso.
+  const [falhas, setFalhas] = useState<Record<string, number>>({});
+  const enderecos = foto ? [foto.grande, foto.miniatura].filter((link) => link !== null) : [];
+  const endereco = enderecos[foto ? (falhas[foto.id] ?? 0) : 0] ?? null;
   const anterior = () => setI((n) => (n - 1 + total) % total);
   const proxima = () => setI((n) => (n + 1) % total);
 
@@ -218,9 +221,15 @@ function Visualizador({
         </div>
         <div className="relative flex min-h-0 flex-1 items-center justify-center px-2">
           {endereco ? (
-            <img key={foto.id} src={endereco} alt={rotulo(i)} className="max-h-full max-w-full object-contain" />
+            <img
+              key={endereco}
+              src={endereco}
+              alt={rotulo(i)}
+              onError={() => setFalhas((atuais) => ({ ...atuais, [foto.id]: (atuais[foto.id] ?? 0) + 1 }))}
+              className="max-h-full max-w-full object-contain"
+            />
           ) : (
-            <p className="text-small">Esta foto não abriu.</p>
+            <p className="text-small">Esta foto não abriu. Atualize a página e tente de novo.</p>
           )}
         </div>
         {total > 1 && (

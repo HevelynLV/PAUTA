@@ -6,6 +6,8 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { Botao, classesBotao } from "@/components/ui/Botao";
 import { CampoSelecao } from "@/components/ui/Campo";
+import { OPCOES_DE_QUARTOS } from "@/lib/filtrosCatalogo";
+import { numeroParaCampo } from "@/lib/imovel";
 
 // Filtros do catálogo (RF19): no celular, chips de tipo e status e o botão
 // "Filtros", que abre a folha de baixo com bairros, preço e quartos
@@ -39,7 +41,10 @@ const classeChip = (ativo: boolean) =>
 // "Jurerê" e "jurere" são a mesma busca.
 const semAcento = (texto: string) => texto.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-const formatarPreco = (valor: number | null) => (valor === null ? "" : valor.toLocaleString("pt-BR"));
+const precoNoCampo = (valor: number | null) => (valor === null ? "" : numeroParaCampo(valor));
+
+// A largura em que a folha vira a coluna do site (o md: do Tailwind).
+const LARGURA_DO_SITE = "(min-width: 768px)";
 
 export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, ativosNaFolha, limpar }: Props) {
   const [aberta, setAberta] = useState(false);
@@ -47,19 +52,49 @@ export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, 
   const [marcados, setMarcados] = useState(escolhidos.bairros.length);
   const titulo = useId();
   const painel = useRef<HTMLDivElement>(null);
+  const botaoFiltros = useRef<HTMLButtonElement>(null);
 
-  // Folha aberta no celular: Esc fecha, o foco vai para dentro e a página de trás
-  // não rola.
+  // Folha aberta no celular: Esc fecha, o foco vai para dentro e fica lá (Tab não
+  // cai nos cards de trás), a página de trás não rola, e ao fechar o foco volta ao
+  // botão. Não dá para usar <dialog> como na galeria: este painel é o mesmo que
+  // fica sempre visível na coluna do site. Girar o celular até a largura do site
+  // fecha a folha, senão a página ficaria sem rolar e sem o X.
   useEffect(() => {
     if (!aberta) return;
-    painel.current?.focus();
-    const fecharComEsc = (evento: KeyboardEvent) => evento.key === "Escape" && setAberta(false);
-    document.addEventListener("keydown", fecharComEsc);
+    const el = painel.current;
+    const botao = botaoFiltros.current;
+    el?.focus();
+
+    function teclas(evento: KeyboardEvent) {
+      if (evento.key === "Escape") setAberta(false);
+      if (evento.key !== "Tab" || !el) return;
+      const focaveis = [...el.querySelectorAll<HTMLElement>("a[href], button, input, select")].filter(
+        (item) => item.offsetParent !== null && !item.hasAttribute("disabled"),
+      );
+      const primeiro = focaveis[0];
+      const ultimo = focaveis[focaveis.length - 1];
+      const atual = document.activeElement;
+      const fora = !el.contains(atual);
+      if (evento.shiftKey && (atual === primeiro || atual === el || fora)) {
+        evento.preventDefault();
+        ultimo?.focus();
+      } else if (!evento.shiftKey && (atual === ultimo || fora)) {
+        evento.preventDefault();
+        primeiro?.focus();
+      }
+    }
+
+    const site = window.matchMedia(LARGURA_DO_SITE);
+    const aoMudarLargura = () => site.matches && setAberta(false);
+    document.addEventListener("keydown", teclas);
+    site.addEventListener("change", aoMudarLargura);
     const rolagem = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", fecharComEsc);
+      document.removeEventListener("keydown", teclas);
+      site.removeEventListener("change", aoMudarLargura);
       document.body.style.overflow = rolagem;
+      botao?.focus();
     };
   }, [aberta]);
 
@@ -80,7 +115,7 @@ export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, 
   return (
     <aside
       aria-label="Filtros"
-      className="flex flex-col gap-2.5 md:sticky md:top-8 md:w-[264px] md:shrink-0 md:gap-[18px] md:rounded-cartao md:border md:border-line md:bg-card md:p-4"
+      className="flex flex-col gap-2.5 md:sticky md:top-8 md:max-h-[calc(100dvh-4rem)] md:w-[264px] md:shrink-0 md:gap-[18px] md:overflow-y-auto md:rounded-cartao md:border md:border-line md:bg-card md:p-4"
     >
       <p className="hidden text-corpo font-bold md:block">Filtros</p>
 
@@ -106,6 +141,7 @@ export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, 
             ))}
           </div>
           <button
+            ref={botaoFiltros}
             type="button"
             onClick={() => setAberta(true)}
             aria-haspopup="dialog"
@@ -162,6 +198,9 @@ export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, 
                 type="search"
                 value={procura}
                 onChange={(evento) => setProcura(evento.target.value)}
+                // Enter (o "Buscar" do teclado do celular) só procura na lista: a
+                // busca do catálogo sai pelo "Ver imóveis".
+                onKeyDown={(evento) => evento.key === "Enter" && evento.preventDefault()}
                 placeholder="Procurar bairro"
                 aria-label="Procurar bairro"
                 className="min-h-11 w-full rounded-botao border border-line bg-card px-3.5 text-ink focus:outline-2 focus:outline-offset-1 focus:outline-mar"
@@ -205,7 +244,7 @@ export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, 
                   name="preco_min"
                   inputMode="numeric"
                   placeholder="R$"
-                  defaultValue={formatarPreco(escolhidos.precoMin)}
+                  defaultValue={precoNoCampo(escolhidos.precoMin)}
                   className="min-h-12 w-full rounded-botao border border-line bg-card px-3.5 text-ink focus:outline-2 focus:outline-offset-1 focus:outline-mar"
                 />
               </div>
@@ -218,7 +257,7 @@ export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, 
                   name="preco_max"
                   inputMode="numeric"
                   placeholder="R$"
-                  defaultValue={formatarPreco(escolhidos.precoMax)}
+                  defaultValue={precoNoCampo(escolhidos.precoMax)}
                   className="min-h-12 w-full rounded-botao border border-line bg-card px-3.5 text-ink focus:outline-2 focus:outline-offset-1 focus:outline-mar"
                 />
               </div>
@@ -229,7 +268,7 @@ export function FiltrosDoCatalogo({ tipos, status, bairros, escolhidos, manter, 
               rotulo="Quartos"
               vazio="Qualquer"
               defaultValue={escolhidos.quartos === null ? "" : String(escolhidos.quartos)}
-              opcoes={[1, 2, 3, 4].map((n) => ({ valor: String(n), rotulo: `${n}+` }))}
+              opcoes={OPCOES_DE_QUARTOS.map((n) => ({ valor: String(n), rotulo: `${n}+` }))}
             />
 
             <div className="flex flex-col gap-2">

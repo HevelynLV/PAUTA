@@ -153,7 +153,7 @@ test("assinante ativo vê os cards com capa, status e número de fotos; vendido 
   await expect(casa.getByText("2 fotos")).toBeVisible();
   await expect(casa.getByText("R$ 7.770.100")).toBeVisible();
   await expect(casa.getByText("4 quartos")).toBeVisible();
-  await expect(casa.getByRole("link")).toHaveAttribute("href", `/assinante/imoveis/${imoveis.casa}`);
+  await expect(casa.getByRole("link")).toHaveAttribute("href", `/assinante/imoveis/${imoveis.casa}?${FAIXA}`);
   // A capa é a miniatura da foto 1, com link temporário do bucket privado; com
   // carregamento preguiçoso fora do topo e na hora nos primeiros cards.
   const capa = casa.locator("img");
@@ -261,6 +261,10 @@ test("computador: os filtros ficam na coluna ao lado da lista", async ({ browser
   const coluna = page.getByRole("complementary", { name: "Filtros" });
   await expect(coluna.getByLabel("Lagoa da Conceição")).toBeVisible();
   await expect(page.getByRole("button", { name: "Filtros" })).toBeHidden();
+  // Em tela baixa, a coluna cabe na tela e rola por dentro: "Ver imóveis" não some.
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await expect.poll(() => coluna.evaluate((el) => el.clientHeight)).toBeLessThanOrEqual(600 - 64);
+  expect(await coluna.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
   await coluna.getByLabel("Lagoa da Conceição").check();
   await coluna.getByRole("button", { name: "Ver imóveis" }).click();
   await expect(page).toHaveURL(new RegExp(`bairro=${listas.bairros.get("Lagoa da Conceição")}`));
@@ -284,11 +288,59 @@ test("páginas de 12: Próxima e Anterior, com a página na URL", async ({ brows
   await expect(cards(page)).toHaveCount(12);
   await expect(page).not.toHaveURL(/pagina=/);
 
-  // Página que não existe mais (ex.: link antigo): aviso e volta para a primeira.
+  // Página que não existe mais (ex.: link antigo): cai na primeira, com os filtros.
   await page.goto(`/assinante?${FAIXA_PAGINAS}&pagina=9`);
-  await expect(page.getByText("Nenhum imóvel com esses filtros.")).toBeVisible();
-  await page.getByRole("link", { name: "Voltar para a primeira página" }).click();
+  await expect(page).not.toHaveURL(/pagina=/);
+  await expect(page).toHaveURL(new RegExp(FAIXA_PAGINAS));
   await expect(cards(page)).toHaveCount(12);
+});
+
+test("voltar do imóvel cai nos mesmos filtros e na mesma página", async ({ browser }) => {
+  const page = await paginaDe(browser, "ativo");
+  await page.goto(`/assinante?${FAIXA_PAGINAS}&pagina=2`);
+  await page.getByRole("link", { name: /Página catálogo 13/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Página catálogo 13" })).toBeVisible();
+  const voltar = test.info().project.name === "celular"
+    ? page.getByRole("link", { name: "Voltar ao catálogo" })
+    : page.getByRole("navigation", { name: "Caminho" }).getByRole("link", { name: "Catálogo" });
+  await voltar.click();
+  await expect(page).toHaveURL(new RegExp(`/assinante\\?${FAIXA_PAGINAS}&pagina=2$`));
+  await expect(cards(page)).toHaveCount(1);
+});
+
+test("detalhe do terreno não mostra o que é zero", async ({ browser }) => {
+  const page = await paginaDe(browser, "ativo");
+  await page.goto(`/assinante/imoveis/${imoveis.terreno}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Terreno catálogo no Campeche" })).toBeVisible();
+  await expect(page.getByRole("term")).toHaveText(["vagas", "área"]);
+});
+
+test("celular: a folha segura o foco, devolve ao fechar, e Enter na procura não envia", async ({ browser }) => {
+  test.skip(test.info().project.name !== "celular", "no computador os filtros ficam na coluna, sem folha");
+  const page = await paginaDe(browser, "ativo");
+  await page.goto(`/assinante?${FAIXA}`);
+  const botao = page.getByRole("button", { name: "Filtros" });
+  await botao.click();
+  const folha = page.getByRole("dialog", { name: "Filtros" });
+  await expect(folha).toBeVisible();
+
+  const procura = folha.getByLabel("Procurar bairro");
+  await procura.fill("campe");
+  await procura.press("Enter");
+  await expect(folha).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`\\?${FAIXA}$`));
+
+  // Do primeiro botão, Shift+Tab vai ao último da folha, e Tab volta ao primeiro.
+  const fechar = folha.getByRole("button", { name: "Fechar" });
+  await fechar.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(folha.getByRole("link", { name: "Limpar bairros, preço e quartos" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(fechar).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(folha).toBeHidden();
+  await expect(botao).toBeFocused();
 });
 
 test("filtros inválidos na URL são ignorados, sem erro", async ({ browser }) => {
@@ -313,6 +365,26 @@ test("assinante bloqueado não abre o catálogo nem recebe imóveis pela API", a
   expect(detalhe).toEqual([]);
   const { data: fotos } = await cliente.from("fotos_imovel").select("id").eq("imovel_id", imoveis.casa);
   expect(fotos).toEqual([]);
+  // Nem o arquivo: o Storage não dá link para quem está sem acesso.
+  const { data: link } = await cliente.storage.from(BALDE).createSignedUrl(`${imoveis.casa}/fachada.jpg`, 60);
+  expect(link).toBeNull();
+});
+
+test("foto de imóvel vendido não chega ao assinante ativo, nem o registro nem o arquivo", async () => {
+  const admin = clienteAdmin();
+  const caminho = `${imoveis.vendido}/fachada.jpg`;
+  const { error: erroEnvio } = await admin.storage
+    .from(BALDE)
+    .upload(caminho, Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { contentType: "image/jpeg" });
+  expect(erroEnvio).toBeNull();
+  const { error } = await admin.from("fotos_imovel").insert({ imovel_id: imoveis.vendido, caminho, ordem: 1 });
+  expect(error).toBeNull();
+
+  const { cliente } = sessoes.ativo;
+  const { data: fotos } = await cliente.from("fotos_imovel").select("id").eq("imovel_id", imoveis.vendido);
+  expect(fotos).toEqual([]);
+  const { data: link } = await cliente.storage.from(BALDE).createSignedUrl(caminho, 60);
+  expect(link).toBeNull();
 });
 
 test("API: o assinante ativo não lê a tabela imoveis e o catálogo não traz colunas internas", async () => {
@@ -333,6 +405,8 @@ test("API: o assinante ativo não lê a tabela imoveis e o catálogo não traz c
   // As fotos do imóvel do catálogo continuam visíveis, e as do pendente não.
   const { data: fotos } = await cliente.from("fotos_imovel").select("id").eq("imovel_id", imoveis.casa);
   expect(fotos).toHaveLength(2);
+  const { data: link } = await cliente.storage.from(BALDE).createSignedUrl(`${imoveis.casa}/fachada.jpg`, 60);
+  expect(link?.signedUrl).toBeTruthy();
   const { data: pendente } = await cliente.rpc("imovel_do_catalogo", { p_imovel: imoveis.pendente });
   expect(pendente).toEqual([]);
 });
