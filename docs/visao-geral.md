@@ -149,6 +149,20 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
 
+## Decisões tomadas em 04/11/2026 (plano da Etapa 7)
+
+- Na página do imóvel, o corretor agenda a visita num calendário: próximos 14 dias, horários fixos do protótipo (09:00, 10:00, 11:00, 14:00, 15:30 e 17:00), recado opcional de até 500 caracteres. Os horários valem na tela; o banco só exige horário futuro, então a lista pode mudar sem migration.
+- Só a visita confirmada fecha o horário. Horário fechado aparece riscado para todos os corretores, sem mostrar quem marcou: outro corretor continua sem ver os pedidos de ninguém.
+- Vários corretores podem pedir o mesmo horário enquanto ninguém foi confirmado, e o proprietário escolhe um. Ao confirmar, os outros pedidos daquele imóvel e horário são recusados na mesma operação, e cada corretor vê a recusa.
+- Um corretor pode ter várias visitas no mesmo imóvel, sem limite, desde que em horários diferentes.
+- O proprietário só confirma ou recusa, sem escrever motivo nem sugerir outro horário: um texto dele abriria um caminho para passar o contato escondido.
+- O proprietário vê também o CRECI do corretor, além de nome, imobiliária e contato.
+- O corretor cancela a própria visita pendente ou confirmada, e o proprietário cancela a confirmada. Cancelar uma visita confirmada reabre o horário; os pedidos já recusados não voltam.
+- Em Meus imóveis, o proprietário tem uma aba Visitas com a agenda de todos os seus imóveis e a lista das próximas visitas: no computador, a semana com dias e horários; no celular, uma faixa com os dias e a lista do dia escolhido. Ele confirma e recusa ali. A página de cada imóvel mostra só as visitas daquele imóvel, com a mesma peça. Essa tela não existe no protótipo.
+- O corretor acompanha as visitas em Negociações, na aba Visitas; a aba Propostas entra na Etapa 8.
+- Quando o responsável remove um corretor, as visitas em aberto dele são canceladas. Para corretor bloqueado ou vencido, a visita continua visível ao proprietário e a regra completa fica para a Etapa 11.
+- Pedido pendente cujo horário passou não pode mais ser confirmado e aparece como "Horário passou", sem tarefa automática.
+
 ## Decisões tomadas em 03/11/2026 (plano da Etapa 6)
 
 - O assinante não lê mais a tabela de imóveis direto: o catálogo e o detalhe vêm de funções do banco que devolvem só as colunas do corretor (sem `proprietario_id`, `exclusividade_fim`, `termo_versao`, `captado_pelo_admin` nem `versao`). As fotos continuam visíveis para ele por uma função auxiliar. Resolve a pendência da auditoria da Etapa 2.

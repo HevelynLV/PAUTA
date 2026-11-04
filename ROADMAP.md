@@ -3,7 +3,20 @@
 ## Onde paramos
 
 Última atualização: 04/11/2026 · por Gabriel
-Etapa atual: 6. Catálogo, na branch `etapa-6-catalogo` (criada da `main` depois do merge do Pull Request #6, Etapa 5). Passos 6.1 a 6.5 feitos; falta abrir o Pull Request e fazer o merge
+Etapa atual: 7. Visita, na branch `etapa-7-visita` (criada da `main` depois do merge do Pull Request #7, Etapa 6). Passos 7.1 e 7.2 feitos; próximo, o 7.3 (telas)
+
+Etapa 7:
+- 7.1 feito (04/11/2026, Gabriel): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 04/11/2026 (plano da Etapa 7)") e no CLAUDE.md. O plano mudou em relação ao protótipo: calendário na página do imóvel, com os horários fechados visíveis a todos, e aba Visitas em Meus imóveis, com agenda de todos os imóveis (tela nova, sem protótipo)
+  - Passos: 7.2 migration `visitas` (tabela só com leitura por RLS; escrita só por funções: pedir, responder e cancelar; `horarios_ocupados()` devolve só data e hora; `minhas_visitas()` e as leituras do proprietário com nome, imobiliária, CRECI e contato; índice que barra duas visitas confirmadas no mesmo imóvel e horário e o mesmo pedido repetido; `remover_corretor()` cancela as visitas em aberto; testes no `testar_rls.sql`), 7.3a calendário do corretor, 7.3b aba Visitas do proprietário e visitas na página do imóvel, 7.3c Negociações com a aba Visitas (`/assinante/negociacoes` hoje dá 404), 7.3d e2e, 7.4 auditoria, 7.5 fechar
+  - A venda (Etapa 9) cancela as visitas pendentes e confirmadas: a Etapa 7 só deixa o status `cancelada` pronto
+  - Atenção no 7.3: sempre formatar e montar data e hora com `America/Sao_Paulo` (a Vercel roda em UTC)
+- 7.2 feito (04/11/2026, Gabriel):
+  - Migration `20261104172132_visitas` aplicada (ver "Atenção"), antes ensaiada com o `testar_rls.sql` inteiro numa transação desfeita. `testar_rls.sql`: 259 de 259 (36 testes novos na seção 15)
+  - Tabela `visitas`, só leitura por RLS. Escrita só por `pedir_visita()`, `confirmar_visita()`, `recusar_visita()` e `cancelar_visita()`. Leituras: `horarios_ocupados()` (só data e hora), `minhas_visitas()` (corretor, com título e endereço, mesmo de imóvel vendido) e `agenda_de_visitas()` (proprietário, com nome, imobiliária, CRECI e contato do corretor). `remover_corretor()` agora cancela as visitas futuras em aberto
+  - Pedir e confirmar disputam a mesma trava na linha do imóvel. O índice `visitas_um_confirmado_por_horario` é a última garantia contra dois confirmados no mesmo horário
+  - Erros que as telas do 7.3 reconhecem pelo hint: `imovel_fora_do_catalogo`, `horario_passado`, `horario_ocupado`, `pedido_repetido`, `visita_nao_encontrada`, `visita_ja_respondida` e `visita_encerrada`
+  - Novos ajudantes do roteiro: `pg_temp.tentar()` (confere também o hint), `pg_temp.u()`, `pg_temp.cenario_de_visita()`, `pg_temp.criar_visita()` e `pg_temp.pedir()`. Lição: dentro de uma só expressão, uma leitura depois de `pg_temp.tentar()` não vê o que ele mudou; leia em outro comando
+- Próximo: passo 7.3 do `docs/prompts.md`, com o plano acima (7.3a calendário do corretor, 7.3b aba Visitas do proprietário, 7.3c Negociações, 7.3d e2e)
 
 Etapa 6, em resumo: o assinante ativo vê o catálogo, filtra por tipo, bairro (vários), preço, quartos e status, com a busca na URL, páginas de 12 e foto em miniatura, e abre o imóvel com galeria, endereço e o contato do proprietário só se ele escolheu mostrar. O corretor só vê "Disponível" ou "Em negociação", e não lê mais a tabela de imóveis direto. Quem está bloqueado ou vencido não vê nada, e imóvel vendido não aparece. A auditoria não achou nada crítico e os 15 achados foram tratados
 
@@ -35,10 +48,6 @@ Etapa 6:
   - Testes novos: voltar com filtros, terreno sem zeros, foco e Enter na folha, Storage com bloqueado, foto e arquivo de imóvel vendido, 390 px no detalhe e os dois casos de foto que não abre. As fotos do `imovel-detalhe.spec.ts` agora são imagens de verdade
   - Lint, tipos e build passam. Bateria completa: 189 passando, 6 pulados e 1 falhando (`imovel-cadastro.spec.ts` no celular, `ERR_ABORTED` em 30 s; o catálogo e o detalhe passaram todos). Depois, sozinho: passou, passou, falhou 2 de 4 numa rodada lenta (motivo não guardado) e 12 de 12 duas vezes, com e sem as telas de erro novas. Ver "Pendências" (Etapa 13)
 - 6.5 fechado (04/11/2026, Gabriel): "Pronto quando" conferido pelos e2e da bateria completa e pelo `testar_rls.sql`: filtrar no celular (`catalogo.spec.ts`, folha de filtros e chips), "Disponível" e "Em negociação" (cards e detalhe; a ligação real com a proposta aceita é da Etapa 8), bloqueado sem nada (`catalogo.spec.ts` e `imovel-detalhe.spec.ts`, inclusive pela API e no Storage) e vendido fora (lista, detalhe, fotos e arquivo)
-- Próximo:
-  1. Abrir o Pull Request `etapa-6-catalogo` → `main` no GitHub, revisar e fazer o merge
-  2. Depois do merge: `git checkout main`, `git pull` e `git checkout -b etapa-7-visita`
-  3. Começar a Etapa 7 com `/clear`, no modo de planejamento, com o prompt 7.1 do `docs/prompts.md`. Nenhuma decisão em aberto trava essa etapa. Leia antes o aviso "Para as Etapas 7 a 9" no "Atenção"
 
 Etapa 5, em resumo: o admin ativa, bloqueia, desbloqueia e exclui imobiliárias e corretores autônomos na tela Assinantes; o cadastro só aceita CRECI com a letra (J para imobiliária; F ou J para autônomo); e o responsável pela imobiliária convida corretores (por e-mail ou por link, até 20 convites por hora), cancela convites e remove corretores na tela Equipe. O corretor convidado entra pelo link já vinculado e ativo. A auditoria não achou nada crítico e todos os achados foram corrigidos ou levados para "Pendências" (Etapa 13)
 
@@ -273,10 +282,6 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - Next.js 16.4.2 (só no `npm run dev`): enviar o formulário do cadastro sem JavaScript (antes de a página carregar) dá `InvariantError: Received an underlying cookies object that does not match either cookies or mutableCookies`, que o próprio Next chama de bug dele. Com JavaScript (o normal), funciona. Conferir de novo com o `npm run build` + `npm start` e, se continuar, abrir um aviso no Next
   - O proprietário pode editar imóvel em negociação (ex.: mudar o preço com propostas aceitas)? Vale a mesma regra de "edição de imóvel disponível"? Na Etapa 4 ainda não há propostas: a sugestão do plano é manter a regra do disponível e rever na Etapa 8
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
-- Etapa 7:
-  - Visita recusada: o proprietário escreve um motivo ou sugere outro horário? (no protótipo, só recusa)
-  - Horários da visita: livres ou em horários fixos (o protótipo usa horários das 09:00 às 17:00), e se o recado do corretor ao proprietário entra
-  - O proprietário também vê o CRECI do corretor nas visitas e propostas? (o protótipo mostra; a Visão geral fala só em nome, imobiliária e contato)
 - Etapa 8:
   - **(banco)** Campos da proposta: o protótipo pede valor, forma de pagamento (à vista, financiamento, permuta), condições e o nome do comprador. O RF23 fala só em "valor e condições". O nome do comprador é dado pessoal de outra pessoa (LGPD): entra ou não?
   - (auditoria da Etapa 2) `imoveis.tem_proposta_aceita` é uma coluna guardada, embora o texto diga que "em negociação" é calculado. Calcular na consulta, ou manter a coluna por gatilho em `propostas` (aceitar, desfazer aceite, recusa em massa da Etapa 9) com teste
@@ -345,6 +350,7 @@ Lições do Captador (problemas já encontrados no projeto antigo; tratar desde 
 - Etapa 1 (PAUTA): o `npm run dev` guarda um cache em disco (`.next/dev`). Depois de mudar o `globals.css`, ele continuou servindo o CSS antigo mesmo reiniciado. Se uma mudança não aparecer no navegador: pare o `npm run dev`, apague a pasta `.next/dev` e rode de novo
 
 Atenção (algo que a próxima pessoa precisa saber):
+- **Migration nova da Etapa 7** (`20261104172132_visitas`, de 04/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: tabela `visitas`, em que ninguém grava direto (só pelas funções `pedir_visita`, `confirmar_visita`, `recusar_visita` e `cancelar_visita`), e `remover_corretor()` agora também cancela as visitas futuras em aberto do corretor
 - **Migration nova da auditoria da Etapa 6** (`20261104155834_auditoria_etapa_6`, de 04/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou só o desempenho de `catalogo()` e o índice `imoveis_catalogo_idx`; colunas, ordem e permissões são as mesmas
 - **Para as Etapas 7 a 9**: o corretor não lê `imoveis`, e `fotos_imovel` só libera imóvel disponível. Negociações e pedidos de visita não podem embutir `imoveis(titulo)` (volta vazio) e o imóvel vendido com proposta do corretor fica sem título e sem foto: essas telas precisam de função própria do banco. `status_no_catalogo()` só é chamada pelas funções do catálogo: proprietário e admin não podem criar um segundo cálculo de "em negociação"
 - Primeira vez no projeto? Veja o `README.md` e a `docs/visao-geral.md`
@@ -397,6 +403,7 @@ Toda migration nova entra aqui assim que for aplicada e o `testar_rls.sql` passa
 - `20261029190825_equipe_exige_acesso` · 29/10/2026 · (quem aplicou não ficou registrado) · revisão do Pull Request da Etapa 5: ler e cancelar convites e `remover_corretor()` só para responsável com acesso. O arquivo foi recriado em 03/11/2026 a partir do histórico do banco (ver "Atenção")
 - `20261103144204_catalogo` · 03/11/2026 · Gabriel · catálogo por funções (`catalogo()`, `imovel_do_catalogo()`, `status_no_catalogo()`, `imovel_no_catalogo()`), fim da leitura direta de `imoveis` pelo assinante (pendência da auditoria da Etapa 2), regras de fotos e Storage pela função e índice do catálogo. `testar_rls.sql`: 218 de 218 passando
 - `20261104155834_auditoria_etapa_6` · 04/11/2026 · Gabriel · desempenho do catálogo: `eh_assinante_ativo()` uma vez por consulta, ordem sem `nulls last` e índice na mesma ordem da lista
+- `20261104172132_visitas` · 04/11/2026 · Gabriel · Etapa 7: tabela `visitas`, escrita só por `pedir_visita()`, `confirmar_visita()`, `recusar_visita()` e `cancelar_visita()`; leituras `horarios_ocupados()`, `minhas_visitas()` e `agenda_de_visitas()`; `remover_corretor()` cancela as visitas futuras em aberto
 
 ## Etapas do MVP
 
