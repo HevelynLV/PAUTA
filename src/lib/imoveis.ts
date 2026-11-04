@@ -126,7 +126,7 @@ export async function imoveisDoDono(donoId: string): Promise<ImovelNaLista[]> {
 
 // Quanto tempo o link de uma foto vale. O bucket é privado: cada visita pede links
 // novos, e um link copiado para fora para de funcionar depois disso.
-const VALIDADE_DO_LINK_EM_SEGUNDOS = 60 * 60;
+export const VALIDADE_DO_LINK_EM_SEGUNDOS = 60 * 60;
 
 export type FotoDoImovel = { id: string; ordem: number; caminho: string; miniatura: string | null; grande?: string | null };
 
