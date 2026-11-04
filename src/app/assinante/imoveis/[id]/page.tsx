@@ -5,18 +5,22 @@ import { Suspense } from "react";
 
 import { GaleriaDoImovel } from "@/components/catalogo/GaleriaDoImovel";
 import { SeloStatus } from "@/components/ui/SeloStatus";
+import { AgendarVisita } from "@/components/visita/AgendarVisita";
 import { exigirTipo, TIPOS_ASSINANTE } from "@/lib/auth";
 import { type ImovelDoCatalogo, imovelDoCatalogo } from "@/lib/catalogo";
 import { formatarTelefone } from "@/lib/conta";
 import { lerFiltros, urlDoCatalogo } from "@/lib/filtrosCatalogo";
+import { diaDe, formatarHorario, seloDaVisita } from "@/lib/horariosDeVisita";
 import { formatarPreco } from "@/lib/imovel";
+import { horariosOcupados, minhasVisitas } from "@/lib/visitas";
 
 export const metadata: Metadata = { title: "Imóvel" };
 
 // Detalhe do imóvel para o corretor (RF18 a RF20, passo 6.3):
 // docs/prototipo/CorImovel.dc.html (celular) e SiteCorImovel.dc.html (site).
-// "Pedir visita" e "Enviar proposta" ficam escondidos até as Etapas 7 e 8
-// (decisão de 03/11/2026).
+// "Enviar proposta" fica escondido até a Etapa 8 (decisão de 03/11/2026). O
+// agendamento de visita (Etapa 7) é um calendário, não a tela CorVisita do protótipo
+// (decisão de 04/11/2026).
 //
 // O contato do proprietário (RNF06) só existe aqui se o banco o devolveu: ele é
 // montado no servidor e, quando está escondido, nada dele chega ao navegador.
@@ -42,6 +46,12 @@ async function Conteudo({
   const voltar = urlDoCatalogo(filtros, { pagina: filtros.pagina });
   const imovel = await imovelDoCatalogo(id);
   if (!imovel) notFound();
+
+  const agora = new Date();
+  const [ocupados, visitas] = await Promise.all([horariosOcupados(id), minhasVisitas(id)]);
+  const abertas = visitas
+    .filter((visita) => ["pendente", "confirmada"].includes(visita.status) && new Date(visita.horario) > agora)
+    .reverse();
 
   const preco = formatarPreco(imovel.preco);
   const endereco = `${imovel.endereco} · ${imovel.bairro} · Florianópolis`;
@@ -89,6 +99,32 @@ async function Conteudo({
         <div className="flex flex-col gap-3 md:sticky md:top-8">
           <div className="flex flex-col gap-3.5 md:rounded-cartao md:border md:border-line md:bg-card md:p-[22px]">
             <span className="hidden font-display text-[28px] font-bold md:block">{preco}</span>
+            <AgendarVisita
+              imovelId={imovel.id}
+              hoje={diaDe(agora)}
+              agora={agora.toISOString()}
+              ocupados={ocupados}
+              meusPedidos={abertas.map((visita) => visita.horario)}
+            />
+            {abertas.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <b className="text-small">Suas visitas neste imóvel</b>
+                <ul className="flex flex-col gap-1.5">
+                  {abertas.map((visita) => {
+                    const selo = seloDaVisita(visita.status, visita.horario, agora, "corretor");
+                    return (
+                      <li key={visita.id} className="flex flex-wrap items-center justify-between gap-2 text-small">
+                        {formatarHorario(visita.horario)}
+                        <SeloStatus status={selo.status}>{selo.rotulo}</SeloStatus>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <Link href="/assinante/negociacoes" className="text-small font-bold text-mar">
+                  Ver em Negociações
+                </Link>
+              </div>
+            )}
             <hr className="hidden border-line md:block" />
             <Contato contato={imovel.contato} />
           </div>

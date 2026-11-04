@@ -3,7 +3,7 @@
 ## Onde paramos
 
 Última atualização: 04/11/2026 · por Gabriel
-Etapa atual: 7. Visita, na branch `etapa-7-visita` (criada da `main` depois do merge do Pull Request #7, Etapa 6). Passos 7.1 e 7.2 feitos; próximo, o 7.3 (telas)
+Etapa atual: 7. Visita, na branch `etapa-7-visita` (criada da `main` depois do merge do Pull Request #7, Etapa 6). Passos 7.1 a 7.3 feitos; próximo, o 7.4 (auditoria, em sessão nova)
 
 Etapa 7:
 - 7.1 feito (04/11/2026, Gabriel): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 04/11/2026 (plano da Etapa 7)") e no CLAUDE.md. O plano mudou em relação ao protótipo: calendário na página do imóvel, com os horários fechados visíveis a todos, e aba Visitas em Meus imóveis, com agenda de todos os imóveis (tela nova, sem protótipo)
@@ -16,7 +16,14 @@ Etapa 7:
   - Pedir e confirmar disputam a mesma trava na linha do imóvel. O índice `visitas_um_confirmado_por_horario` é a última garantia contra dois confirmados no mesmo horário
   - Erros que as telas do 7.3 reconhecem pelo hint: `imovel_fora_do_catalogo`, `horario_passado`, `horario_ocupado`, `pedido_repetido`, `visita_nao_encontrada`, `visita_ja_respondida` e `visita_encerrada`
   - Novos ajudantes do roteiro: `pg_temp.tentar()` (confere também o hint), `pg_temp.u()`, `pg_temp.cenario_de_visita()`, `pg_temp.criar_visita()` e `pg_temp.pedir()`. Lição: dentro de uma só expressão, uma leitura depois de `pg_temp.tentar()` não vê o que ele mudou; leia em outro comando
-- Próximo: passo 7.3 do `docs/prompts.md`, com o plano acima (7.3a calendário do corretor, 7.3b aba Visitas do proprietário, 7.3c Negociações, 7.3d e2e)
+- 7.3 feito (04/11/2026, Gabriel), sem migration:
+  - Corretor: botão "Agendar visita" na página do imóvel, com calendário numa janela (folha de baixo no celular): 14 dias, horários fixos, riscado o que está fechado ou já passou, "seu pedido" no que ele já pediu, e recado opcional. Abaixo do botão, "Suas visitas neste imóvel". `/assinante/negociacoes` lista próximas e anteriores, com cancelar (ainda sem abas: a de Propostas entra na Etapa 8)
+  - Proprietário: abas Imóveis e Visitas em Meus imóveis, com o número de pedidos para confirmar. `/proprietario/visitas` (tela sem protótipo): semana em grade no computador, faixa de dias no celular, e abaixo as próximas visitas ou as do dia escolhido, com `?semana=` e `?dia=` na URL. Confirmar, recusar e cancelar ali e na página do imóvel, com aviso quando outro corretor pediu o mesmo horário. "N visitas para confirmar" no cartão do imóvel
+  - Novos: `src/lib/horariosDeVisita.ts` (data e hora sempre no fuso de Florianópolis, roda no navegador e no servidor), `src/lib/visitas.ts` (leituras, `server-only`), `src/app/assinante/visitas/acoes.ts`, `src/app/proprietario/visitas/acoes.ts` e `src/components/visita/`. A action `pedirVisita` confere de novo os 14 dias e os horários fixos
+  - `e2e/visitas.spec.ts`: fluxo inteiro, nada de quem marcou no HTML nem nos dados do Next, dois corretores no mesmo horário, vários horários do mesmo corretor, horário ocupado no último instante, recusar, cancelar dos dois lados, agenda no celular e no computador, horário passado, outra proprietária e bloqueado. `imovel-detalhe.spec.ts` agora espera o botão de visita. Telas conferidas por foto nos dois tamanhos
+  - Lint e build passam. Bateria completa (`npm run test:e2e`), 31 min: 192 passando, 6 pulados, 11 falhando e 5 sem rodar. Rodados de novo (`--last-failed`): 15 de 16 passaram sem mudança; o que sobrou era o fluxo de visita estourando os 30 s por teste, corrigido com 120 s no arquivo. Depois disso, `visitas` e `imovel-detalhe`: 34 de 34. Não houve uma rodada completa limpa depois do ajuste; fica para a auditoria
+  - Sem teste: `pedirVisita` chamada direto com dia ou horário fora da lista (as regras de segurança estão no `testar_rls.sql`; essa é só regra de tela)
+- Próximo: passo 7.4, `/auditar-etapa 7` numa sessão nova
 
 Etapa 6, em resumo: o assinante ativo vê o catálogo, filtra por tipo, bairro (vários), preço, quartos e status, com a busca na URL, páginas de 12 e foto em miniatura, e abre o imóvel com galeria, endereço e o contato do proprietário só se ele escolheu mostrar. O corretor só vê "Disponível" ou "Em negociação", e não lê mais a tabela de imóveis direto. Quem está bloqueado ou vencido não vê nada, e imóvel vendido não aparece. A auditoria não achou nada crítico e os 15 achados foram tratados
 

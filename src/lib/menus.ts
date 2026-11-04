@@ -9,13 +9,13 @@ export type MenusDaArea = { rotulo: string; celular: ItemMenu[]; computador: Ite
 export const menuProprietario: MenusDaArea = {
   rotulo: "Menu do proprietário",
   celular: [
-    { href: "/proprietario", rotulo: "Imóveis", icone: "imoveis" },
+    { href: "/proprietario", rotulo: "Imóveis", icone: "imoveis", tambem: ["/proprietario/visitas"] },
     { href: "/proprietario/imoveis/novo", rotulo: "Novo imóvel", icone: "novo", semMenuInferior: true },
     { href: "/proprietario/avisos", rotulo: "Avisos", icone: "avisos" }, // Etapa 10
     { href: "/proprietario/conta", rotulo: "Conta", icone: "conta" }, // passo 3.5
   ],
   computador: [
-    { href: "/proprietario", rotulo: "Meus imóveis", icone: "imoveis" },
+    { href: "/proprietario", rotulo: "Meus imóveis", icone: "imoveis", tambem: ["/proprietario/visitas"] },
     { href: "/proprietario/imoveis/novo", rotulo: "Novo imóvel", icone: "novo" },
     { href: "/proprietario/avisos", rotulo: "Avisos", icone: "avisos" },
     { href: "/proprietario/conta", rotulo: "Minha conta", icone: "conta" },
