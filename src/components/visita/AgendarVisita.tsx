@@ -44,7 +44,7 @@ export function AgendarVisita({
   const janela = useRef<HTMLDialogElement>(null);
   const dias = diasParaAgendar(hoje);
   const [dia, setDia] = useState(dias[0]);
-  const [hora, setHora] = useState<string>();
+  const [horaClicada, setHora] = useState<string>();
   const [recado, setRecado] = useState("");
   const [erro, setErro] = useState<string>();
   const [enviado, setEnviado] = useState<string>();
@@ -58,13 +58,17 @@ export function AgendarVisita({
   function situacao(d: string, h: string) {
     const instante = instanteDe(d, h);
     if (new Date(instante) <= new Date(agora)) return "passou";
-    if (mesmoInstante(ocupados, instante)) return "ocupado";
+    // Nesta ordem: a visita confirmada dele também está em "ocupados".
     if (mesmoInstante(meusPedidos, instante)) return "meu";
+    if (mesmoInstante(ocupados, instante)) return "ocupado";
     return "livre";
   }
 
   // Dia sem nenhum horário livre (ex.: hoje à noite) não abre.
   const temHorario = (d: string) => HORARIOS_DE_VISITA.some((h) => situacao(d, h) === "livre");
+
+  // Se o horário escolhido fechou enquanto a janela estava aberta, ele deixa de valer.
+  const hora = horaClicada && situacao(dia, horaClicada) === "livre" ? horaClicada : undefined;
 
   function abrir() {
     setErro(undefined);
@@ -93,12 +97,18 @@ export function AgendarVisita({
 
   return (
     <>
-      <Botao onClick={abrir} className="w-full">
-        Agendar visita
-      </Botao>
+      {/* No celular, o rodapé fixo do protótipo (.foot); no site, dentro da coluna. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card px-5 pt-3 pb-[max(22px,env(safe-area-inset-bottom))] md:static md:z-auto md:border-0 md:bg-transparent md:p-0">
+        <Botao onClick={abrir} className="w-full">
+          Agendar visita
+        </Botao>
+      </div>
       <dialog
         ref={janela}
         aria-labelledby={tituloId}
+        onCancel={(evento) => {
+          if (ocupado) evento.preventDefault();
+        }}
         className="mb-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-folha bg-card p-0 text-ink backdrop:bg-[rgba(16,32,30,.45)] md:m-auto md:max-w-[520px] md:rounded-modal"
       >
         <div className="flex flex-col gap-4 px-5 pt-5 pb-[max(26px,env(safe-area-inset-bottom))] md:p-7">
@@ -108,10 +118,10 @@ export function AgendarVisita({
 
           {enviado ? (
             <>
-              <p className="text-ink2">
+              <p role="status" className="text-ink2">
                 Sua visita para {enviado} está aguardando a confirmação do proprietário. Acompanhe em Negociações.
               </p>
-              <Botao variante="secundario" onClick={() => janela.current?.close()}>
+              <Botao variante="secundario" autoFocus onClick={() => janela.current?.close()}>
                 Fechar
               </Botao>
             </>

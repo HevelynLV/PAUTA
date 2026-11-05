@@ -57,7 +57,7 @@ async function Conteudo({
   const endereco = `${imovel.endereco} · ${imovel.bairro} · Florianópolis`;
 
   return (
-    <div className="flex w-full max-w-[1140px] flex-col pb-6 md:gap-6 md:px-10 md:pb-10 md:pt-8">
+    <div className="flex w-full max-w-[1140px] flex-col pb-28 md:gap-6 md:px-10 md:pb-10 md:pt-8">
       <nav aria-label="Caminho" className="hidden items-center gap-2 text-small text-ink2 md:flex">
         <Link href={voltar} className="font-semibold text-mar">
           Catálogo

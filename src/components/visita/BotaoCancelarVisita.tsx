@@ -36,6 +36,9 @@ export function BotaoCancelarVisita({
       <dialog
         ref={janela}
         aria-labelledby={tituloId}
+        onCancel={(evento) => {
+          if (ocupado) evento.preventDefault();
+        }}
         className="mb-0 mt-auto w-full max-w-none rounded-t-folha bg-card p-0 text-left text-ink backdrop:bg-[rgba(16,32,30,.45)] md:m-auto md:max-w-[520px] md:rounded-modal"
       >
         <div className="flex flex-col gap-3.5 px-5 pt-5 pb-[max(26px,env(safe-area-inset-bottom))] md:gap-4 md:p-7">

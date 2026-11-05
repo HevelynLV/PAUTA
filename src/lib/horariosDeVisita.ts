@@ -9,8 +9,8 @@
 export const FUSO = "America/Sao_Paulo";
 export const DESLOCAMENTO = "-03:00";
 
-// Os horários do protótipo. O banco só exige horário futuro, então esta lista pode
-// mudar sem migration.
+// Os horários do protótipo. O banco só exige horário futuro, de minuto cheio e a até
+// 15 dias, então esta lista e os 14 dias podem mudar sem migration.
 export const HORARIOS_DE_VISITA = ["09:00", "10:00", "11:00", "14:00", "15:30", "17:00"];
 export const DIAS_PARA_AGENDAR = 14;
 export const TAMANHO_DO_RECADO = 500;
@@ -57,8 +57,9 @@ export function inicioDaSemana(dia: string) {
   return somarDias(dia, -((diaDaSemana(dia) + 6) % 7));
 }
 
+// Só anos 20xx: os dias vêm da URL, e um ano como 0000 ou 9999 derruba a consulta.
 export function diaValido(dia: unknown): dia is string {
-  return typeof dia === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dia) && emUtc(dia).toISOString().slice(0, 10) === dia;
+  return typeof dia === "string" && /^20\d{2}-\d{2}-\d{2}$/.test(dia) && emUtc(dia).toISOString().slice(0, 10) === dia;
 }
 
 // Os dias que podem ser agendados, de hoje em diante.
@@ -109,13 +110,16 @@ export function seloDaVisita(status: StatusVisita, horario: string, agora: Date,
   }
 }
 
-// O banco diz o motivo no hint (migration 20261104172132_visitas).
+// O banco diz o motivo no hint (migrations 20261104172132_visitas e
+// 20261105124825_auditoria_etapa_7).
 export function mensagemDoErroDeVisita(hint: string | null | undefined) {
   switch (hint) {
     case "imovel_fora_do_catalogo":
       return "Este imóvel não está mais no catálogo.";
     case "horario_passado":
-      return "Esse horário já passou. Escolha outro.";
+      return "Esse horário já passou.";
+    case "horario_invalido":
+      return "Escolha um dia e um horário da lista.";
     case "horario_ocupado":
       return "Esse horário acabou de ser ocupado. Escolha outro.";
     case "pedido_repetido":

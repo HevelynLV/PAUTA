@@ -42,7 +42,7 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
   const agora = new Date();
   const hoje = diaDe(agora);
   const diaEscolhido = diaValido(busca.dia) ? busca.dia : null;
-  const semana = inicioDaSemana(diaValido(busca.semana) ? busca.semana : (diaEscolhido ?? hoje));
+  const semana = inicioDaSemana(diaEscolhido ?? (diaValido(busca.semana) ? busca.semana : hoje));
   const dias = Array.from({ length: 7 }, (_, i) => somarDias(semana, i));
 
   const [naSemana, proximas] = await Promise.all([

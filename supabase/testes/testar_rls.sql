@@ -4839,7 +4839,7 @@ returns uuid
 language sql
 as $$
   insert into public.visitas (imovel_id, corretor_id, horario, status)
-  values (p_imovel, p_corretor, p_horario, p_status::public.status_visita)
+  values (p_imovel, p_corretor, date_trunc('minute', p_horario), p_status::public.status_visita)
   returning id;
 $$;
 
@@ -4848,12 +4848,12 @@ create or replace function pg_temp.pedir(p_imovel uuid, p_horario timestamptz, p
 returns text
 language sql
 as $$
-  select format('select public.pedir_visita(%L, %L, %L)', p_imovel, p_horario, p_recado);
+  select format('select public.pedir_visita(%L, %L, %L)', p_imovel, date_trunc('minute', p_horario), p_recado);
 $$;
 
 -- Pedir ---------------------------------------------------------
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.entrar_como(pg_temp.u(31));
@@ -4949,7 +4949,7 @@ do $$ declare v text; im uuid; begin
           'bloqueado (P0001) horario_passado / bloqueado (P0001) horario_passado', v);
 end $$;
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.criar_visita(im, pg_temp.u(32), h, 'confirmada');
@@ -4963,7 +4963,7 @@ do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
   values ('Não pede horário já confirmado para outro corretor', 'bloqueado (P0001) horario_ocupado', v);
 end $$;
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.entrar_como(pg_temp.u(31));
@@ -4977,7 +4977,7 @@ do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
   values ('O mesmo corretor não pede o mesmo horário duas vezes', 'bloqueado (P0001) pedido_repetido', v);
 end $$;
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.entrar_como(pg_temp.u(31));
@@ -4996,7 +4996,7 @@ do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
   values ('Corretor pede vários horários no imóvel, e outro pede o mesmo horário', '4', v);
 end $$;
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.criar_visita(im, pg_temp.u(31), h, 'recusada');
@@ -5017,7 +5017,7 @@ do $$ declare v text; im uuid; begin
     v := pg_temp.tentar(pg_temp.pedir(im, now() + interval '2 days', repeat('a', 501)));
     v := v || ' / ' || pg_temp.tentar(pg_temp.pedir(im, now() + interval '3 days', repeat('a', 500)));
     v := v || ' / ' || (select count(*) from public.visitas where recado is null);
-    perform public.pedir_visita(im, now() + interval '4 days', '   ');
+    perform public.pedir_visita(im, date_trunc('minute', now() + interval '4 days'), '   ');
     v := v || ' / ' || (select count(*) from public.visitas where recado is null);
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
@@ -5075,15 +5075,15 @@ do $$ declare v text; im uuid; begin
     perform pg_temp.criar_admin(pg_temp.u(9));
     perform pg_temp.criar_visita(im, pg_temp.u(31));
     perform pg_temp.entrar_como(pg_temp.u(31));
-    v := (select count(*)::text from public.visitas);
+    v := (select count(*)::text from public.visitas where imovel_id = im);
     perform pg_temp.entrar_como(pg_temp.u(32));
-    v := v || ' ' || (select count(*) from public.visitas);
+    v := v || ' ' || (select count(*) from public.visitas where imovel_id = im);
     perform pg_temp.entrar_como(pg_temp.u(1));
-    v := v || ' ' || (select count(*) from public.visitas);
+    v := v || ' ' || (select count(*) from public.visitas where imovel_id = im);
     perform pg_temp.entrar_como(pg_temp.u(2));
-    v := v || ' ' || (select count(*) from public.visitas);
+    v := v || ' ' || (select count(*) from public.visitas where imovel_id = im);
     perform pg_temp.entrar_como(pg_temp.u(9));
-    v := v || ' ' || (select count(*) from public.visitas);
+    v := v || ' ' || (select count(*) from public.visitas where imovel_id = im);
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -5111,7 +5111,7 @@ end $$;
 
 -- Horários fechados ---------------------------------------------
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.criar_visita(im, pg_temp.u(31), h, 'confirmada');
@@ -5238,7 +5238,7 @@ do $$ declare v text; im uuid; begin
   values ('Agenda: corretor autônomo vem sem imobiliária, com o CRECI dele', 'Autônomo de Teste / true / 90031-F', v);
 end $$;
 
-do $$ declare v text; im uuid; im2 uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; im2 uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     im2 := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
@@ -5266,7 +5266,7 @@ end $$;
 
 -- Confirmar e recusar -------------------------------------------
 
-do $$ declare v text; im uuid; im2 uuid; h timestamptz := now() + interval '2 days';
+do $$ declare v text; im uuid; im2 uuid; h timestamptz := date_trunc('minute', now() + interval '2 days');
               a uuid; b uuid; c uuid; d uuid; begin
   begin
     im := pg_temp.cenario_de_visita();
@@ -5365,7 +5365,7 @@ do $$ declare v text; im uuid; a uuid; begin
   values ('Não confirma visita de imóvel que saiu do catálogo', 'bloqueado (P0001) imovel_fora_do_catalogo', v);
 end $$;
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.criar_visita(im, pg_temp.u(31), h, 'confirmada');
@@ -5379,7 +5379,7 @@ do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; begin
   values ('O banco nunca guarda duas visitas confirmadas no mesmo imóvel e horário', 'bloqueado (23505)', v);
 end $$;
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; a uuid; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); a uuid; begin
   begin
     im := pg_temp.cenario_de_visita();
     a := pg_temp.criar_visita(im, pg_temp.u(31), h);
@@ -5399,7 +5399,7 @@ end $$;
 
 -- Cancelar ------------------------------------------------------
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; a uuid; b uuid; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); a uuid; b uuid; begin
   begin
     im := pg_temp.cenario_de_visita();
     a := pg_temp.criar_visita(im, pg_temp.u(31), h);
@@ -5417,7 +5417,7 @@ do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; a uui
   values ('Corretor cancela a própria visita, pendente ou confirmada, e o horário reabre', 'cancelada cancelada / 0', v);
 end $$;
 
-do $$ declare v text; im uuid; h timestamptz := now() + interval '2 days'; a uuid; b uuid; begin
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); a uuid; b uuid; begin
   begin
     im := pg_temp.cenario_de_visita();
     a := pg_temp.criar_visita(im, pg_temp.u(31), h, 'confirmada');
@@ -5493,7 +5493,7 @@ end $$;
 
 -- Corretor removido ---------------------------------------------
 
-do $$ declare v text; im uuid; a uuid; b uuid; c uuid; d uuid; h timestamptz := now() + interval '2 days'; begin
+do $$ declare v text; im uuid; a uuid; b uuid; c uuid; d uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
   begin
     im := pg_temp.cenario_de_visita();
     perform pg_temp.criar_imobiliaria(pg_temp.u(11), '12345-J');
@@ -5517,6 +5517,138 @@ do $$ declare v text; im uuid; a uuid; b uuid; c uuid; d uuid; h timestamptz := 
   insert into resultado (teste, esperado, obtido)
   values ('Remover corretor cancela as visitas futuras dele; a passada e as de outros ficam',
           'cancelada cancelada confirmada pendente', v);
+end $$;
+
+-- ---------------------------------------------------------------
+-- 16. Auditoria da Etapa 7 (migration 20261105124825_auditoria_etapa_7)
+-- ---------------------------------------------------------------
+
+-- Imobiliária ativa 11 com o corretor convidado 21.
+create or replace function pg_temp.equipe_de_visita()
+returns void
+language plpgsql
+as $$
+begin
+  perform pg_temp.criar_imobiliaria(pg_temp.u(11), '12345-J');
+  perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(11), 'ativo');
+  perform pg_temp.criar_convite(pg_temp.u(11), 'codigo-de-teste', null, now() + interval '1 day');
+  perform pg_temp.criar_corretor(pg_temp.u(21), 'codigo-de-teste');
+end;
+$$;
+
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_visita(im, pg_temp.u(32), h, 'confirmada');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('select public.pedir_visita(%L, %L)', im, 'infinity'))
+      || ' / ' || pg_temp.tentar(format('select public.pedir_visita(%L, %L)', im, '2099-01-01 00:00:00+00'))
+      || ' / ' || pg_temp.tentar(format('select public.pedir_visita(%L, %L)', im, date_trunc('minute', now() + interval '16 days')))
+      || ' / ' || pg_temp.tentar(format('select public.pedir_visita(%L, %L)', im, h + interval '1 second'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Horário infinito, muito distante ou fora do minuto cheio é recusado',
+          'bloqueado (P0001) horario_invalido / bloqueado (P0001) horario_invalido / bloqueado (P0001) horario_invalido / bloqueado (P0001) horario_invalido', v);
+end $$;
+
+do $$ declare v text; im uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.pedir(im, now() + interval '14 days'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O último dia da tela, 14 dias à frente, cabe no teto do banco', 'permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_imobiliaria(pg_temp.u(11), '12345-J');
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(11), 'ativo');
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    v := pg_temp.tentar(pg_temp.pedir(im, now() + interval '2 days'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Responsável de imobiliária ativa pede visita', 'permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := pg_temp.tentar(pg_temp.pedir(im, now() + interval '2 days'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor removido não pede visita', 'bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; im uuid; vis uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    -- Pedido que já passou: remover não mexe nele, e a visita continua sendo dele.
+    vis := pg_temp.criar_visita(im, pg_temp.u(21), now() - interval '1 day');
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := pg_temp.tentar(format('select public.cancelar_visita(%L)', vis));
+    v := v || ' / ' || (select count(*) from public.minhas_visitas());
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor removido não cancela nem lê as próprias visitas', 'bloqueado (P0001) visita_nao_encontrada / 0', v);
+end $$;
+
+do $$ declare v text; im uuid; vis uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    vis := pg_temp.criar_visita(im, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform public.cancelar_visita(vis);
+    select status || ' / ' || (cancelada_em is not null) || ' / ' || (cancelada_por = pg_temp.u(31))
+    into v from public.visitas where id = vis;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cancelar guarda quando e quem cancelou', 'cancelada / true / true', v);
+end $$;
+
+do $$ declare v text; im uuid; vis uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    vis := pg_temp.criar_visita(im, pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select status || ' / ' || (cancelada_em is not null) || ' / ' || (cancelada_por = pg_temp.u(11))
+    into v from public.visitas where id = vis;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Remover o corretor guarda quem cancelou as visitas dele', 'cancelada / true / true', v);
 end $$;
 
 -- ---------------------------------------------------------------

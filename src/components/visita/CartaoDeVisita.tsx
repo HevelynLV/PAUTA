@@ -92,7 +92,7 @@ function CartaoDeVisita({
           </a>
         </div>
       </div>
-      {visita.recado && <p className="whitespace-pre-line rounded-[14px] bg-cinza-soft px-3.5 py-2.5 text-small">{visita.recado}</p>}
+      {visita.recado && <p className="whitespace-pre-line rounded-[14px] bg-cinza-soft px-3.5 py-2.5 text-small [overflow-wrap:anywhere]">{visita.recado}</p>}
       {visita.status === "pendente" && <RespostaDaVisita id={visita.id} podeConfirmar={futura} concorrentes={concorrentes} />}
       {visita.status === "confirmada" && futura && (
         <div className="self-start">

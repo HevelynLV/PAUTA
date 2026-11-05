@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page, type Request } from "@playwright/test";
 
 import { diaDe, diaEMes, instanteDe, nomeDoDia, somarDias } from "../src/lib/horariosDeVisita";
 import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura } from "./apoio/supabase";
@@ -17,7 +17,7 @@ const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
 const ORIGEM = "http://localhost:3000";
 const unico = () => String(Math.floor(10_000 + Math.random() * 89_999));
 
-type Conta = "dono" | "outraDona" | "ana" | "beto" | "bloqueado";
+type Conta = "dono" | "outraDona" | "ana" | "beto" | "cida" | "dani" | "bloqueado";
 const sessoes = {} as Record<Conta, Awaited<ReturnType<typeof entrarComo>>>;
 const ids = {} as Record<Conta, string>;
 let tipo: number;
@@ -36,14 +36,20 @@ test.beforeAll(async () => {
   ids.outraDona = await criarConta(email("outra"), { tipo: "proprietario", nome: "Outra Dona", telefone: "48999990081" });
   ids.ana = await criarConta(email("ana"), { tipo: "autonomo", nome: "Ana Corretora", telefone: "48999990082", creci: `${unico()}-F` });
   ids.beto = await criarConta(email("beto"), { tipo: "autonomo", nome: "Beto Corretor", telefone: "48999990083", creci: `${unico()}-F` });
+  ids.cida = await criarConta(email("cida"), { tipo: "autonomo", nome: "Cida Corretora", telefone: "48999990085", creci: `${unico()}-F` });
+  ids.dani = await criarConta(email("dani"), { tipo: "autonomo", nome: "Dani Corretora", telefone: "48999990086", creci: `${unico()}-F` });
   ids.bloqueado = await criarConta(email("bloqueado"), { tipo: "autonomo", nome: "Bia Bloqueada", telefone: "48999990084", creci: `${unico()}-F` });
   await mudarAssinatura(ids.ana, "ativo");
   await mudarAssinatura(ids.beto, "ativo");
+  await mudarAssinatura(ids.cida, "ativo");
+  await mudarAssinatura(ids.dani, "ativo");
   await mudarAssinatura(ids.bloqueado, "ativo", true);
   sessoes.dono = await entrarComo(email("dono"));
   sessoes.outraDona = await entrarComo(email("outra"));
   sessoes.ana = await entrarComo(email("ana"));
   sessoes.beto = await entrarComo(email("beto"));
+  sessoes.cida = await entrarComo(email("cida"));
+  sessoes.dani = await entrarComo(email("dani"));
   sessoes.bloqueado = await entrarComo(email("bloqueado"));
 });
 
@@ -88,10 +94,10 @@ async function criarImovel(titulo: string) {
 }
 
 // Grava a visita direto, para montar a situação de cada teste.
-async function criarVisita(imovelId: string, corretor: Conta, horario: string, status = "pendente") {
+async function criarVisita(imovelId: string, corretor: Conta, horario: string, status = "pendente", recado?: string) {
   const { error } = await clienteAdmin()
     .from("visitas")
-    .insert({ imovel_id: imovelId, corretor_id: ids[corretor], horario, status });
+    .insert({ imovel_id: imovelId, corretor_id: ids[corretor], horario, status, recado });
   if (error) throw error;
 }
 
@@ -102,6 +108,35 @@ function abrirCalendario(page: Page) {
 const janela = (page: Page) => page.getByRole("dialog", { name: /Agendar visita|Pedido enviado/ });
 const nomeDoDiaNoCalendario = `${nomeDoDia(dia)}, ${diaEMes(dia)}`;
 const cartao = (page: Page, titulo: string) => page.getByRole("listitem").filter({ hasText: titulo });
+
+const visitasDoImovel = async (imovelId: string) =>
+  (await clienteAdmin().from("visitas").select("status, horario, corretor_id").eq("imovel_id", imovelId)).data ?? [];
+
+// Clica, deixa a tela mandar a Server Action e guarda a requisição, sem deixá-la chegar.
+async function gravarAction(page: Page, padrao: string, clicar: () => Promise<void>) {
+  let gravada: Request | undefined;
+  await page.route(padrao, async (rota) => {
+    if (rota.request().method() === "POST" && rota.request().headers()["next-action"]) {
+      gravada = rota.request();
+      await rota.abort();
+    } else {
+      await rota.continue();
+    }
+  });
+  await clicar();
+  await expect.poll(() => gravada).toBeDefined();
+  const cabecalhos = Object.fromEntries(
+    Object.entries(await gravada!.allHeaders()).filter(([nome]) => !nome.startsWith(":") && nome !== "cookie"),
+  );
+  return { url: new URL(gravada!.url()).pathname, cabecalhos, corpo: gravada!.postData()! };
+}
+
+async function chamarAction(browser: Browser, conta: Conta, acao: Awaited<ReturnType<typeof gravarAction>>, corpo = acao.corpo) {
+  const contexto = await browser.newContext({ baseURL: ORIGEM });
+  await contexto.addCookies(sessoes[conta].cookies);
+  await contexto.request.post(acao.url, { headers: acao.cabecalhos, data: corpo, maxRedirects: 0 });
+  await contexto.close();
+}
 
 test("o corretor agenda, o proprietário confirma e o corretor vê a resposta", async ({ browser }) => {
   const titulo = "Casa fluxo de visita";
@@ -156,6 +191,8 @@ test("o corretor agenda, o proprietário confirma e o corretor vê a resposta", 
   const html = await (await beto.request.get(`/assinante/imoveis/${imovel}`)).text();
   const dados = await (await beto.request.get(`/assinante/imoveis/${imovel}`, { headers: { RSC: "1" } })).text();
   for (const resposta of [html, dados]) {
+    // Prova que a resposta é a página do imóvel, e não um redirecionamento.
+    expect(resposta).toContain(titulo);
     expect(resposta).not.toContain("Ana Corretora");
     expect(resposta).not.toContain(email("ana"));
   }
@@ -168,7 +205,15 @@ test("dois corretores pedem o mesmo horário: confirmar um recusa o outro", asyn
   await criarVisita(imovel, "ana", horario);
   await criarVisita(imovel, "beto", horario);
 
-  // Pedido dos outros não fecha o horário: um terceiro ainda veria livre.
+  // Pedido dos outros não fecha o horário: quem não pediu ainda vê livre.
+  const cida = await paginaDe(browser, "cida");
+  await cida.goto(`/assinante/imoveis/${imovel}`);
+  await abrirCalendario(cida);
+  await janela(cida).getByRole("button", { name: nomeDoDiaNoCalendario }).click();
+  await expect(janela(cida).getByRole("button", { name: "10:00", exact: true })).toBeEnabled();
+  await cida.close();
+
+  // Quem pediu vê o próprio pedido.
   const ana = await paginaDe(browser, "ana");
   await ana.goto(`/assinante/imoveis/${imovel}`);
   await abrirCalendario(ana);
@@ -217,6 +262,9 @@ test("horário ocupado no último instante mostra a mensagem certa", async ({ br
   await criarVisita(imovel, "beto", instanteDe(dia, "15:30"), "confirmada");
   await janela(ana).getByRole("button", { name: /às 15:30$/ }).click();
   await expect(janela(ana).getByRole("alert")).toContainText("acabou de ser ocupado");
+  // O calendário se atualiza: o horário fecha e deixa de estar escolhido.
+  await expect(janela(ana).getByRole("button", { name: "15:30, ocupado" })).toBeDisabled();
+  await expect(janela(ana).getByRole("button", { name: "Pedir visita" })).toBeVisible();
 });
 
 test("recusar deixa o horário livre", async ({ browser }) => {
@@ -320,4 +368,165 @@ test("outra proprietária e corretor bloqueado não têm acesso", async ({ brows
   await expect(bloqueado).toHaveURL(/\/acesso-suspenso$/);
   const pedido = await sessoes.bloqueado.cliente.rpc("pedir_visita", { p_imovel: imovel, p_horario: instanteDe(dia, "10:00") });
   expect(pedido.error?.code).toBe("42501");
+});
+
+test("as telas de visita barram os outros tipos e quem não entrou", async ({ browser }) => {
+  const ana = await paginaDe(browser, "ana");
+  await ana.goto("/proprietario/visitas");
+  await expect(ana).toHaveURL(/\/assinante$/);
+
+  const dono = await paginaDe(browser, "dono");
+  await dono.goto("/assinante/negociacoes");
+  await expect(dono).toHaveURL(/\/proprietario$/);
+
+  const contexto = await browser.newContext({ baseURL: ORIGEM });
+  const visitante = await contexto.newPage();
+  await visitante.goto("/proprietario/visitas");
+  await expect(visitante).toHaveURL(/\/entrar/);
+  await visitante.goto("/assinante/negociacoes");
+  await expect(visitante).toHaveURL(/\/entrar/);
+  await contexto.close();
+});
+
+test("action de visita chamada por outro tipo não faz nada", async ({ browser }) => {
+  const imovel = await criarImovel("Casa action do dono");
+  await criarVisita(imovel, "ana", instanteDe(dia, "09:00"));
+
+  const dono = await paginaDe(browser, "dono");
+  await dono.goto(`/proprietario/imoveis/${imovel}`);
+  const confirmar = await gravarAction(dono, "**/proprietario/**", () =>
+    dono.getByRole("listitem").filter({ hasText: "Ana Corretora" }).getByRole("button", { name: "Confirmar" }).click(),
+  );
+  await dono.close();
+
+  await chamarAction(browser, "ana", confirmar);
+  expect((await visitasDoImovel(imovel))[0].status).toBe("pendente");
+  await chamarAction(browser, "outraDona", confirmar);
+  expect((await visitasDoImovel(imovel))[0].status).toBe("pendente");
+
+  // A dona manda a requisição como gravada: vale (prova que ela estava certa).
+  await chamarAction(browser, "dono", confirmar);
+  expect((await visitasDoImovel(imovel))[0].status).toBe("confirmada");
+});
+
+test("pedirVisita chamada direto respeita tipo, dias e horários", async ({ browser }) => {
+  const imovel = await criarImovel("Casa action do corretor");
+  const ana = await paginaDe(browser, "ana");
+  await ana.goto(`/assinante/imoveis/${imovel}`);
+  await abrirCalendario(ana);
+  await janela(ana).getByRole("button", { name: nomeDoDiaNoCalendario }).click();
+  await janela(ana).getByRole("button", { name: "14:00", exact: true }).click();
+  const pedir = await gravarAction(ana, "**/assinante/imoveis/**", () =>
+    janela(ana).getByRole("button", { name: /às 14:00$/ }).click(),
+  );
+  await ana.close();
+  expect(pedir.corpo).toContain("14:00");
+
+  await chamarAction(browser, "dono", pedir);
+  expect(await visitasDoImovel(imovel)).toHaveLength(0);
+  await chamarAction(browser, "ana", pedir, pedir.corpo.replace("14:00", "14:17"));
+  expect(await visitasDoImovel(imovel)).toHaveLength(0);
+  await chamarAction(browser, "ana", pedir, pedir.corpo.replace(dia, somarDias(diaDe(new Date()), 30)));
+  expect(await visitasDoImovel(imovel)).toHaveLength(0);
+
+  await chamarAction(browser, "ana", pedir);
+  expect(await visitasDoImovel(imovel)).toHaveLength(1);
+});
+
+test("o banco só aceita horário de minuto cheio e até 15 dias", async () => {
+  const imovel = await criarImovel("Casa horários estranhos");
+  await criarVisita(imovel, "beto", instanteDe(dia, "09:00"), "confirmada");
+  const segundoDepois = new Date(new Date(instanteDe(dia, "09:00")).getTime() + 1000).toISOString();
+  for (const horario of ["infinity", "2099-01-01T03:17:00Z", `${somarDias(diaDe(new Date()), 16)}T10:00:00-03:00`, segundoDepois]) {
+    const { error } = await sessoes.ana.cliente.rpc("pedir_visita", { p_imovel: imovel, p_horario: horario });
+    expect(error?.hint, horario).toBe("horario_invalido");
+  }
+  expect(await visitasDoImovel(imovel)).toHaveLength(1);
+});
+
+test("recado com palavra longa não estica a página do proprietário", async ({ browser }) => {
+  const imovel = await criarImovel("Casa recado longo");
+  await criarVisita(imovel, "ana", instanteDe(dia, "10:00"), "pendente", `http://exemplo.com/${"a".repeat(300)}`);
+  const dono = await paginaDe(browser, "dono");
+  await dono.goto(`/proprietario/imoveis/${imovel}`);
+  await expect(dono.getByText("http://exemplo.com/")).toBeVisible();
+  const medida = () => dono.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(await medida()).toBe(0);
+  await dono.goto(`/proprietario/visitas?dia=${dia}`);
+  await expect(dono.getByText("http://exemplo.com/")).toBeVisible();
+  expect(await medida()).toBe(0);
+});
+
+test("a agenda aguenta endereços fora do normal", async ({ browser }) => {
+  const imovel = await criarImovel("Casa endereços");
+  await criarVisita(imovel, "ana", instanteDe(dia, "11:00"));
+  const dono = await paginaDe(browser, "dono");
+  for (const busca of ["semana=9999-12-31", "semana=0000-01-03", "dia=9999-12-31"]) {
+    await dono.goto(`/proprietario/visitas?${busca}`);
+    await expect(dono.getByRole("main").getByRole("link", { name: "Hoje" }), busca).toBeVisible();
+  }
+  // Dia fora da semana da URL: vale o dia, e a visita dele aparece.
+  await dono.goto(`/proprietario/visitas?semana=${somarDias(dia, -28)}&dia=${dia}`);
+  await expect(dono.getByRole("listitem").filter({ hasText: "Casa endereços" })).toBeVisible();
+});
+
+test("a visita confirmada do corretor aparece como dele no calendário", async ({ browser }) => {
+  const imovel = await criarImovel("Casa minha confirmada");
+  await criarVisita(imovel, "ana", instanteDe(dia, "09:00"), "confirmada");
+  const ana = await paginaDe(browser, "ana");
+  await ana.goto(`/assinante/imoveis/${imovel}`);
+  await abrirCalendario(ana);
+  await janela(ana).getByRole("button", { name: nomeDoDiaNoCalendario }).click();
+  await expect(janela(ana).getByRole("button", { name: "09:00, você já pediu" })).toBeDisabled();
+});
+
+test("Esc não fecha a janela durante o envio, e o foco vai para Fechar no fim", async ({ browser }) => {
+  const imovel = await criarImovel("Casa envio lento");
+  const ana = await paginaDe(browser, "ana");
+  await ana.goto(`/assinante/imoveis/${imovel}`);
+  await ana.route("**/assinante/imoveis/**", async (rota) => {
+    if (rota.request().method() === "POST") await new Promise((pronto) => setTimeout(pronto, 1500));
+    await rota.continue();
+  });
+  await abrirCalendario(ana);
+  await janela(ana).getByRole("button", { name: nomeDoDiaNoCalendario }).click();
+  await janela(ana).getByRole("button", { name: "14:00", exact: true }).click();
+  await janela(ana).getByRole("button", { name: /às 14:00$/ }).click();
+  await expect(janela(ana).getByRole("button", { name: "Enviando…" })).toBeVisible();
+  await ana.keyboard.press("Escape");
+  await expect(janela(ana)).toBeVisible();
+  await expect(janela(ana).getByRole("heading", { name: "Pedido enviado" })).toBeVisible();
+  await expect(janela(ana).getByRole("button", { name: "Fechar" })).toBeFocused();
+});
+
+test("corretor bloqueado no meio do fluxo vai para a tela certa, sem aviso de internet", async ({ browser }) => {
+  const imovel = await criarImovel("Casa bloqueio no meio");
+  const dani = await paginaDe(browser, "dani");
+  await dani.goto(`/assinante/imoveis/${imovel}`);
+  await abrirCalendario(dani);
+  await janela(dani).getByRole("button", { name: nomeDoDiaNoCalendario }).click();
+  await janela(dani).getByRole("button", { name: "14:00", exact: true }).click();
+  await dani.evaluate(() => {
+    new MutationObserver(() => {
+      if (document.body.innerText.includes("Confira a internet")) document.documentElement.dataset.viuInternet = "sim";
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  await mudarAssinatura(ids.dani, "ativo", true);
+  await janela(dani).getByRole("button", { name: /às 14:00$/ }).click();
+  await expect(dani).toHaveURL(/\/acesso-suspenso$/);
+  expect(await dani.evaluate(() => document.documentElement.dataset.viuInternet)).toBeUndefined();
+  await mudarAssinatura(ids.dani, "ativo");
+});
+
+test("no celular, Agendar visita fica no rodapé sem precisar rolar", async ({ browser }) => {
+  test.skip(test.info().project.name !== "celular", "o rodapé é só do celular");
+  const imovel = await criarImovel("Casa rodapé");
+  const ana = await paginaDe(browser, "ana");
+  await ana.goto(`/assinante/imoveis/${imovel}`);
+  await expect(ana.getByRole("button", { name: "Agendar visita" })).toBeInViewport();
+  // O fim da página não fica escondido atrás do rodapé.
+  await ana.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const aviso = await ana.getByText("Outros corretores podem estar trabalhando").boundingBox();
+  const botao = await ana.getByRole("button", { name: "Agendar visita" }).boundingBox();
+  expect(aviso!.y + aviso!.height).toBeLessThanOrEqual(botao!.y);
 });
