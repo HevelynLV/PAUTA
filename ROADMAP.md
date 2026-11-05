@@ -3,7 +3,9 @@
 ## Onde paramos
 
 Última atualização: 05/11/2026 · por Gabriel
-Etapa atual: 8. Proposta, na branch `etapa-8-proposta` (criada da `main` depois do merge do Pull Request #8, Etapa 7). Passos 8.1 a 8.3 feitos. Próximo: passo 8.4, auditoria numa sessão nova (`/auditar-etapa 8`)
+Etapa atual: 8. Proposta, na branch `etapa-8-proposta` (criada da `main` depois do merge do Pull Request #8, Etapa 7). Passos 8.1 a 8.3 feitos e branch enviada ao GitHub. Próximo: numa sessão nova (`/clear`), nesta mesma branch, rodar `/auditar-etapa 8` (passo 8.4), que inclui uma rodada completa do `npm run test:e2e`. Só depois do 8.5 a etapa fica concluída e o Pull Request pode entrar na `main`
+
+Etapa 8, em resumo: o corretor envia a proposta pela página do imóvel, com valor, forma de pagamento, condições e, se quiser, o nome do comprador. O proprietário vê os dados do corretor e aceita, recusa ou desfaz o aceite, e pode ter várias aceitas ao mesmo tempo. Com pelo menos uma aceita, o imóvel aparece como "Em negociação" no catálogo. Depois de recusada ou retirada, o corretor pode mandar outra. O envio do contrato entra na Etapa 9
 
 Etapa 8:
 - 8.1 feito (05/11/2026, Gabriel): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 05/11/2026 (plano da Etapa 8)") e no CLAUDE.md
@@ -321,6 +323,9 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - Bairros (4.2): os 56 da migration `imoveis_etapa_4` vêm da lista por região publicada sobre o Decreto municipal nº 29.142 (abril de 2026), não do texto do decreto. Conferir contra o decreto; correção é migration nova (ou o admin desativa e acrescenta). No protótipo aparece "Jurerê Internacional"; na lista, "Jurerê"
   - Next.js 16.4.2 (só no `npm run dev`): enviar o formulário do cadastro sem JavaScript (antes de a página carregar) dá `InvariantError: Received an underlying cookies object that does not match either cookies or mutableCookies`, que o próprio Next chama de bug dele. Com JavaScript (o normal), funciona. Conferir de novo com o `npm run build` + `npm start` e, se continuar, abrir um aviso no Next
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
+- Etapa 8:
+  - Falta a auditoria (8.4) e o fechamento (8.5): a etapa fica `[ ]` até lá, mesmo com o Pull Request aberto. A última bateria completa (250 passando, 8 pulados, 2 falhando) foi antes de corrigir o localizador de `e2e/propostas.spec.ts`; falta uma rodada completa limpa
+  - Sem teste: duas operações ao mesmo tempo (ex.: dois corretores enviando ou o dono aceitando no mesmo instante). A auditoria deve conferir as travas do imóvel e da proposta
 - Etapa 9:
   - (plano da Etapa 8) `desfazer_aceite()` e `cancelar_proposta()` nascem sem conferir contrato, porque a tabela ainda não existe. A Etapa 9 precisa acrescentar "só sem contrato enviado" nas duas
   - (auditoria da Etapa 7) A função atômica de aprovar o contrato precisa cancelar as visitas pendentes e confirmadas do imóvel, preenchendo `cancelada_em` e `cancelada_por`. Decidir se cancela também as já passadas. Hoje, um imóvel vendido com pedido pendente deixaria o botão Confirmar na tela do dono (sempre com erro) e o corretor cairia em 404 no link do imóvel
@@ -495,3 +500,4 @@ PAUTA (antes, Domora):
 - 05/11/2026 · Gabriel · Etapa 8, passo 8.1: plano aprovado. "Em negociação" passa a ser calculado das propostas aceitas e a coluna `tem_proposta_aceita` sai do banco; corretor reenvia depois de recusada, sem limite, e retira a proposta enquanto não há contrato; desfazer o aceite volta para aguardando. Registrado na Visão geral e no CLAUDE.md
 - 05/11/2026 · Gabriel · Etapa 8, passo 8.2: migration `propostas` aplicada, com "em negociação" calculado das propostas aceitas e a coluna `tem_proposta_aceita` apagada. `testar_rls.sql`: 315 de 315. Falta o 8.3 (telas e status)
 - 05/11/2026 · Gabriel · Etapa 8, passo 8.3: telas de proposta do corretor e do proprietário, abas em Negociações e na página do imóvel, selo "Em negociação" e contador em Meus imóveis. Falta a auditoria (8.4) e o fechamento (8.5)
+- 05/11/2026 · Gabriel · Etapa 8: branch `etapa-8-proposta` enviada ao GitHub antes da auditoria, para a migration aplicada no banco ficar no repositório. Faltam os passos 8.4 e 8.5
