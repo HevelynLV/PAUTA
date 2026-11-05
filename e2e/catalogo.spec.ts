@@ -30,7 +30,6 @@ type NovoImovel = {
   preco: number;
   quartos: number;
   status?: "disponivel" | "pendente" | "vendido";
-  emNegociacao?: boolean;
   // Entrou no catálogo há n minutos (a lista mostra o mais recente primeiro).
   haMinutos?: number;
 };
@@ -50,7 +49,6 @@ function linhaDoImovel(novo: NovoImovel) {
     vagas: 2,
     area: 220,
     status,
-    tem_proposta_aceita: novo.emNegociacao ?? false,
     termo_versao: "2026-10-provisorio",
     termo_aceito_em: new Date(agora).toISOString(),
     ...(aprovado && {
@@ -99,11 +97,20 @@ test.beforeAll(async () => {
 
   [imoveis.casa, imoveis.apartamento, imoveis.terreno, imoveis.vendido, imoveis.pendente] = await criarImoveis([
     { titulo: "Casa catálogo no Campeche", tipo: "Casa", bairro: "Campeche", preco: 7_770_100, quartos: 4, haMinutos: 1 },
-    { titulo: "Apartamento catálogo na Lagoa", tipo: "Apartamento", bairro: "Lagoa da Conceição", preco: 7_770_200, quartos: 2, emNegociacao: true, haMinutos: 2 },
+    { titulo: "Apartamento catálogo na Lagoa", tipo: "Apartamento", bairro: "Lagoa da Conceição", preco: 7_770_200, quartos: 2, haMinutos: 2 },
     { titulo: "Terreno catálogo no Campeche", tipo: "Terreno", bairro: "Campeche", preco: 7_770_300, quartos: 0, haMinutos: 3 },
     { titulo: "Casa catálogo vendida", tipo: "Casa", bairro: "Campeche", preco: 7_770_400, quartos: 3, status: "vendido" },
     { titulo: "Casa catálogo pendente", tipo: "Casa", bairro: "Campeche", preco: 7_770_500, quartos: 3, status: "pendente" },
   ]);
+  const { error } = await clienteAdmin().from("propostas").insert({
+    imovel_id: imoveis.apartamento,
+    corretor_id: ids.ativo,
+    valor: 7_000_000,
+    forma_pagamento: "a_vista",
+    condicoes: "Proposta de teste",
+    status: "aceita",
+  });
+  if (error) throw error;
   await porFoto(imoveis.casa, "fachada", 1);
   await porFoto(imoveis.casa, "sala", 2);
 

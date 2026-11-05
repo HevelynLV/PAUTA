@@ -14,9 +14,12 @@ type Moldura = {
 };
 
 const classesCaixa = (erro?: string) =>
-  `min-h-12 w-full rounded-botao border bg-card px-3.5 text-ink read-only:bg-cinza-soft read-only:text-ink2 focus:outline-2 focus:outline-offset-1 focus:outline-mar ${
+  `min-h-12 w-full rounded-botao border bg-card px-3.5 text-ink focus:outline-2 focus:outline-offset-1 focus:outline-mar ${
     erro ? "border-erro" : "border-line"
   }`;
+
+// Só em input e textarea: para o navegador, todo <select> é "somente leitura".
+const classesSoLeitura = "read-only:bg-cinza-soft read-only:text-ink2";
 
 // Liga a dica e o erro à caixa e devolve as propriedades que a caixa recebe.
 function ligacoes({ name, dica, erro, id }: Moldura & { id?: string }) {
@@ -67,7 +70,7 @@ export function Campo({ name, rotulo, dica, erro, id, className = "", ...input }
   const { idCampo, caixa } = ligacoes({ name, rotulo, dica, erro, id });
   return (
     <Envoltorio idCampo={idCampo} rotulo={rotulo} dica={dica} erro={erro} className={className}>
-      <input {...caixa} className={classesCaixa(erro)} {...input} />
+      <input {...caixa} className={`${classesCaixa(erro)} ${classesSoLeitura}`} {...input} />
     </Envoltorio>
   );
 }
@@ -98,7 +101,7 @@ export function CampoTextoLongo({ name, rotulo, dica, erro, id, className = "", 
   const { idCampo, caixa } = ligacoes({ name, rotulo, dica, erro, id });
   return (
     <Envoltorio idCampo={idCampo} rotulo={rotulo} dica={dica} erro={erro} className={className}>
-      <textarea {...caixa} className={`${classesCaixa(erro)} min-h-24 resize-none py-3`} {...area} />
+      <textarea {...caixa} className={`${classesCaixa(erro)} ${classesSoLeitura} min-h-24 resize-none py-3`} {...area} />
     </Envoltorio>
   );
 }

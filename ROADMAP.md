@@ -3,7 +3,25 @@
 ## Onde paramos
 
 Última atualização: 05/11/2026 · por Gabriel
-Etapa atual: 7. Visita, na branch `etapa-7-visita` (criada da `main` depois do merge do Pull Request #7, Etapa 6). Passos 7.1 a 7.5 feitos, etapa concluída. Próximo: enviar a branch, abrir o Pull Request e, depois do merge, começar a Etapa 8 (passo 8.1)
+Etapa atual: 8. Proposta, na branch `etapa-8-proposta` (criada da `main` depois do merge do Pull Request #8, Etapa 7). Passos 8.1 a 8.3 feitos. Próximo: passo 8.4, auditoria numa sessão nova (`/auditar-etapa 8`)
+
+Etapa 8:
+- 8.1 feito (05/11/2026, Gabriel): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 05/11/2026 (plano da Etapa 8)") e no CLAUDE.md
+  - Passos: 8.2 migration `propostas` (tabela só com leitura por RLS; escrita só por `enviar_proposta()`, `cancelar_proposta()`, `aceitar_proposta()`, `recusar_proposta()` e `desfazer_aceite()`; leituras `minhas_propostas()`, `propostas_recebidas()` e a do selo e contador do proprietário; índice único de uma proposta em aberto por corretor e imóvel; `imovel_em_negociacao()` usada por `status_no_catalogo()`; apagar `imoveis.tem_proposta_aceita` depois de trocar o cálculo e limpar `subir_versao_do_imovel()`; `remover_corretor()` cancela as propostas em aberto; testes no `testar_rls.sql`), 8.3a corretor envia pela janela da página do imóvel, 8.3b abas Propostas e Visitas em Negociações, com "Enviar proposta" na visita confirmada só se o imóvel estiver no catálogo (ajusta `minhas_visitas()`), 8.3c abas e ações do proprietário, selo e "N propostas" em Meus imóveis, 8.3d e2e, 8.4 auditoria, 8.5 fechar
+  - Atenção no 8.2: `valor` precisa recusar `NaN` (o banco aceita, e `NaN > 0` dá verdadeiro); enviar e aceitar disputam a trava do imóvel, como nas visitas; o `testar_rls.sql` e o `e2e/catalogo.spec.ts` passam a criar proposta de verdade em vez de ligar a coluna
+  - "Enviar contrato assinado" fica escondido até a Etapa 9, e o texto da proposta aceita não promete um botão que ainda não existe
+- 8.2 feito (05/11/2026, Gabriel): migration `20261105180815_propostas` aplicada (ver "Atenção"), antes ensaiada com o `testar_rls.sql` inteiro numa transação desfeita. `testar_rls.sql`: 315 de 315 no banco real (49 testes novos na seção 17). `catalogo`, `imovel-detalhe` e `visitas` no e2e: 74 passando e 4 pulados; a bateria completa não foi rodada
+  - Tabela `propostas`, só leitura por RLS. Escrita só por `enviar_proposta()`, `aceitar_proposta()`, `recusar_proposta()`, `desfazer_aceite()` e `cancelar_proposta()`. Leituras: `minhas_propostas()`, `propostas_recebidas()` e `resumo_de_propostas()` (selo e contagem do proprietário). `imovel_em_negociacao()` é o cálculo único, usado por `status_no_catalogo()`, e a coluna `imoveis.tem_proposta_aceita` foi apagada. `minhas_visitas()` ganhou `no_catalogo`, e `remover_corretor()` cancela as propostas em aberto
+  - Erros que as telas do 8.3 reconhecem pelo hint: `imovel_fora_do_catalogo`, `valor_invalido`, `forma_invalida`, `condicoes_invalidas`, `comprador_invalido`, `proposta_em_aberto`, `proposta_nao_encontrada`, `proposta_ja_respondida` e `proposta_encerrada`
+  - `e2e/catalogo.spec.ts` cria proposta aceita de verdade em vez de ligar a coluna. Novos ajudantes do roteiro: `pg_temp.criar_proposta()`, `pg_temp.enviar()` e `pg_temp.inserir()`
+  - Sem teste: duas operações ao mesmo tempo (o roteiro roda numa conexão só). A trava na linha do imóvel segue o padrão das visitas
+- 8.3 feito (05/11/2026, Gabriel), sem migration:
+  - Corretor: "Enviar proposta" na página do imóvel, numa janela (folha de baixo no celular), com a diferença para o preço pedido. No celular, os dois botões ficam no rodapé fixo, como no protótipo. Com proposta em aberto, o botão dá lugar a "Sua proposta neste imóvel"; depois de recusada, aparece o aviso de que pode enviar outra. `?proposta=1` já abre a janela
+  - `/assinante/negociacoes`: abas Propostas (padrão, como no protótipo) e Visitas (`?aba=visitas`). Propostas são cartões no celular e a tabela do protótipo no site, com "Retirar proposta" e "Enviar outra proposta" só na mais recente de cada imóvel. A visita confirmada ganhou "Enviar proposta"
+  - Proprietário: abas Visitas e Propostas no celular (`?aba=propostas`) e duas colunas no site, com aceitar, recusar e desfazer aceite; nome, imobiliária, CRECI, contato do corretor e comprador. Em Meus imóveis, selo "Em negociação" e "N propostas", ambos vindos de `resumo_de_propostas()`
+  - Novos: `src/lib/proposta.ts` (rótulos e mensagens, roda no navegador e no servidor), `src/lib/propostas.ts` (leituras, `server-only`), `src/app/assinante/propostas/acoes.ts`, `src/app/proprietario/propostas/acoes.ts` e `src/components/proposta/`
+  - Corrigido junto: todo `<select>` do app aparecia cinza, como se estivesse travado, porque o navegador trata select como somente leitura (`Campo.tsx`)
+  - `e2e/propostas.spec.ts`: fluxo inteiro com duas aceitas, recusar e reenviar, retirar, valor, visita levando à proposta, vendido, sigilo do comprador e do contato, bloqueado, actions de outro tipo, textos longos, abas e rodapé. Telas conferidas por foto nos dois tamanhos. Lint e build passam. Bateria completa: 250 passando, 8 pulados e 2 falhando, os dois por um localizador do teste novo, corrigido; depois disso, `propostas.spec.ts` passou sozinho e não houve outra rodada completa
 
 Etapa 7, em resumo: o corretor agenda a visita num calendário na página do imóvel (14 dias, horários fixos, recado opcional), e o horário confirmado aparece riscado para todos, sem mostrar quem marcou. O proprietário vê nome, imobiliária, CRECI e contato do corretor, confirma ou recusa em Meus imóveis, na aba Visitas (agenda de todos os imóveis) ou na página do imóvel, e o corretor acompanha a resposta em Negociações. Os dois lados cancelam, o que reabre o horário. A auditoria não achou nada crítico e os 18 achados foram tratados
 
@@ -38,7 +56,7 @@ Etapa 7:
   - Pendências novas nas Etapas 9, 10, 12 e 13
 - 7.5 fechado (05/11/2026, Gabriel): "Pronto quando" conferido item por item na bateria completa: o corretor pede, o proprietário confirma ou recusa e o corretor vê a resposta (`visitas.spec.ts`, celular e computador). Lint e build passam; `npm run test:e2e`: 227 passando, 7 pulados de propósito, 0 falhando (13 min); `testar_rls.sql`: 266 de 266; as 23 migrations aplicadas; nenhuma conta de teste sobrando no banco
   - Uma rodada antes dessa teve 5 falhas e 32 testes sem rodar porque o Supabase respondeu `502: Bad gateway` por um tempo, nos preparos e limpezas dos testes. Sem mudar nada, os 37 passaram (1 pulado) e a rodada seguinte foi limpa. Se muitos testes falharem de uma vez em `beforeAll` ou `afterAll`, procure esse erro antes de procurar defeito no código
-- Próximo: enviar a branch `etapa-7-visita` e abrir o Pull Request. Depois do merge, numa sessão nova e no modo de planejamento: criar a branch `etapa-8-proposta` a partir da `main` atualizada e colar o prompt 8.1 do `docs/prompts.md`. Decidir antes o que está em "Pendências", Etapa 8 (nome do comprador na proposta, LGPD, e a coluna `tem_proposta_aceita`)
+- Depois do merge do Pull Request #8 (05/11/2026), a branch `etapa-8-proposta` foi criada da `main` atualizada
 
 Etapa 6, em resumo: o assinante ativo vê o catálogo, filtra por tipo, bairro (vários), preço, quartos e status, com a busca na URL, páginas de 12 e foto em miniatura, e abre o imóvel com galeria, endereço e o contato do proprietário só se ele escolheu mostrar. O corretor só vê "Disponível" ou "Em negociação", e não lê mais a tabela de imóveis direto. Quem está bloqueado ou vencido não vê nada, e imóvel vendido não aparece. A auditoria não achou nada crítico e os 15 achados foram tratados
 
@@ -302,17 +320,15 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
 - Etapa 4:
   - Bairros (4.2): os 56 da migration `imoveis_etapa_4` vêm da lista por região publicada sobre o Decreto municipal nº 29.142 (abril de 2026), não do texto do decreto. Conferir contra o decreto; correção é migration nova (ou o admin desativa e acrescenta). No protótipo aparece "Jurerê Internacional"; na lista, "Jurerê"
   - Next.js 16.4.2 (só no `npm run dev`): enviar o formulário do cadastro sem JavaScript (antes de a página carregar) dá `InvariantError: Received an underlying cookies object that does not match either cookies or mutableCookies`, que o próprio Next chama de bug dele. Com JavaScript (o normal), funciona. Conferir de novo com o `npm run build` + `npm start` e, se continuar, abrir um aviso no Next
-  - O proprietário pode editar imóvel em negociação (ex.: mudar o preço com propostas aceitas)? Vale a mesma regra de "edição de imóvel disponível"? Na Etapa 4 ainda não há propostas: a sugestão do plano é manter a regra do disponível e rever na Etapa 8
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
-- Etapa 8:
-  - **(banco)** Campos da proposta: o protótipo pede valor, forma de pagamento (à vista, financiamento, permuta), condições e o nome do comprador. O RF23 fala só em "valor e condições". O nome do comprador é dado pessoal de outra pessoa (LGPD): entra ou não?
-  - (auditoria da Etapa 2) `imoveis.tem_proposta_aceita` é uma coluna guardada, embora o texto diga que "em negociação" é calculado. Calcular na consulta, ou manter a coluna por gatilho em `propostas` (aceitar, desfazer aceite, recusa em massa da Etapa 9) com teste
 - Etapa 9:
+  - (plano da Etapa 8) `desfazer_aceite()` e `cancelar_proposta()` nascem sem conferir contrato, porque a tabela ainda não existe. A Etapa 9 precisa acrescentar "só sem contrato enviado" nas duas
   - (auditoria da Etapa 7) A função atômica de aprovar o contrato precisa cancelar as visitas pendentes e confirmadas do imóvel, preenchendo `cancelada_em` e `cancelada_por`. Decidir se cancela também as já passadas. Hoje, um imóvel vendido com pedido pendente deixaria o botão Confirmar na tela do dono (sempre com erro) e o corretor cairia em 404 no link do imóvel
   - Qual a % de comissão do PAUTA (sobre a comissão do corretor ou sobre o valor do imóvel)
   - A cláusula da comissão do PAUTA no contrato é condição para o admin aprovar? (o protótipo trata como item da conferência)
   - Limite do PDF do contrato: o protótipo usa até 20 MB
 - Etapa 10:
+  - (plano da Etapa 8) A proposta pode ser reenviada sem limite depois de recusada ou retirada: rever o excesso de avisos e o custo no WhatsApp
   - (auditoria da Etapa 7) A lista de eventos do prompt 10.2 não cita o cancelamento de visita nem a recusa em massa ao confirmar um horário. `cancelada_por` diz quem cancelou: o aviso vai para o outro lado
   - Provedor da API oficial do WhatsApp (Meta direto ou um intermediário como Twilio ou Z-API) e o custo por mensagem
   - Os avisos "imóvel novo no catálogo" (para todos os assinantes) e "mensalidade paga", que aparecem no protótipo, entram no RF29? O primeiro pode custar caro no WhatsApp
@@ -320,7 +336,7 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
 - Etapa 11:
   - Preço da mensalidade (igual para imobiliária e corretor autônomo?)
   - **(banco)** O pagamento da mensalidade vem antes ou depois de o admin ativar a assinatura?
-  - O que acontece com as visitas e propostas de um assinante com acesso suspenso
+  - O que acontece com as visitas de um assinante com acesso suspenso (propostas: decidido no plano da Etapa 8, não mudam e o proprietário segue respondendo)
   - Contato da equipe PAUTA que aparece para o assinante bloqueado
 - Etapa 12:
   - (auditoria da Etapa 7) O que acontece com as visitas pendentes e confirmadas de um imóvel cuja exclusividade venceu. A tela precisa tratar o caso: pedido pendente sai do "para confirmar" e o corretor não cai em 404. `status = 'disponivel'` está repetido em `pedir_visita`, `confirmar_visita` e `imovel_no_catalogo`: se o catálogo passar a olhar a data, atualizar os três
@@ -372,10 +388,11 @@ Lições do Captador (problemas já encontrados no projeto antigo; tratar desde 
 - Etapa 4: o admin só consegue aprovar o imóvel se ele não mudou desde que a tela foi aberta (RF14). Sem isso, uma edição feita entre revisar e aprovar vai ao ar sem registro
 - Etapa 13: SMTP próprio (ex.: Resend), modelos de e-mail em português, religar a confirmação de e-mail, ligar "Secure password change" e conferir que o cadastro não revela se um e-mail já tem conta. Com a confirmação ligada, o perfil nasce antes de o e-mail ser confirmado: planejar a limpeza de contas nunca confirmadas
 - Etapa 13: trocar o Site URL do Supabase pelo endereço da Vercel e cadastrar as Redirect URLs de produção
-- LGPD: planejar a exclusão e a anonimização de usuários e imóveis antes do piloto
+- LGPD: planejar a exclusão e a anonimização de usuários e imóveis antes do piloto, incluindo o nome do comprador guardado nas propostas (decisão de 05/11/2026)
 - Etapa 1 (PAUTA): o `npm run dev` guarda um cache em disco (`.next/dev`). Depois de mudar o `globals.css`, ele continuou servindo o CSS antigo mesmo reiniciado. Se uma mudança não aparecer no navegador: pare o `npm run dev`, apague a pasta `.next/dev` e rode de novo
 
 Atenção (algo que a próxima pessoa precisa saber):
+- **Migration nova da Etapa 8** (`20261105180815_propostas`, de 05/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: tabela `propostas` e a coluna `imoveis.tem_proposta_aceita` **foi apagada**: "em negociação" vem de `imovel_em_negociacao()`. Depois de aplicada, código ou teste antigo que grave essa coluna falha; o `e2e/catalogo.spec.ts` da `main` falha até esta branch entrar
 - **Migration nova da auditoria da Etapa 7** (`20261105124825_auditoria_etapa_7`, de 05/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: `pedir_visita()` só aceita horário de minuto cheio e a até 15 dias (teste que chama a função precisa de horário assim; `now() + interval '2 days'` tem segundos e é recusado), e `visitas` ganhou `cancelada_em` e `cancelada_por`
 - **Migration nova da Etapa 7** (`20261104172132_visitas`, de 04/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: tabela `visitas`, em que ninguém grava direto (só pelas funções `pedir_visita`, `confirmar_visita`, `recusar_visita` e `cancelar_visita`), e `remover_corretor()` agora também cancela as visitas futuras em aberto do corretor
 - **Migration nova da auditoria da Etapa 6** (`20261104155834_auditoria_etapa_6`, de 04/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou só o desempenho de `catalogo()` e o índice `imoveis_catalogo_idx`; colunas, ordem e permissões são as mesmas
@@ -432,6 +449,7 @@ Toda migration nova entra aqui assim que for aplicada e o `testar_rls.sql` passa
 - `20261104155834_auditoria_etapa_6` · 04/11/2026 · Gabriel · desempenho do catálogo: `eh_assinante_ativo()` uma vez por consulta, ordem sem `nulls last` e índice na mesma ordem da lista
 - `20261104172132_visitas` · 04/11/2026 · Gabriel · Etapa 7: tabela `visitas`, escrita só por `pedir_visita()`, `confirmar_visita()`, `recusar_visita()` e `cancelar_visita()`; leituras `horarios_ocupados()`, `minhas_visitas()` e `agenda_de_visitas()`; `remover_corretor()` cancela as visitas futuras em aberto
 - `20261105124825_auditoria_etapa_7` · 05/11/2026 · Gabriel · auditoria da Etapa 7: `pedir_visita()` recusa horário a mais de 15 dias ou fora do minuto cheio; `cancelada_em` e `cancelada_por` em `visitas`, preenchidas por `cancelar_visita()` e `remover_corretor()`. `testar_rls.sql`: 266 de 266 passando
+- `20261105180815_propostas` · 05/11/2026 · Gabriel · tabela `propostas`, funções de enviar, responder, desfazer e retirar, leituras do corretor e do proprietário, `imovel_em_negociacao()` e `remover_corretor()` cancelando as propostas em aberto; apaga `imoveis.tem_proposta_aceita`. `testar_rls.sql`: 315 de 315
 
 ## Etapas do MVP
 
@@ -473,3 +491,7 @@ PAUTA (antes, Domora):
 - 03/11/2026 · Gabriel · Etapa 6, passo 6.3: página de detalhe do imóvel para o corretor (galeria com tela cheia, selo "Disponível" ou "Em negociação", endereço, números, descrição e o contato do proprietário só quando ele escolheu mostrar, com ligar, WhatsApp e e-mail). O "em negociação" fica num lugar só, pronto para a Etapa 8 ligar. Teste confere que o contato escondido não vem no HTML, nos dados do Next nem na API. Sem migration; e2e com 178 passando. Falta a auditoria (6.4) e o fechamento (6.5)
 - 04/11/2026 · Gabriel · Etapa 6 concluída (6.4 e 6.5): auditoria sem nada crítico e os 15 achados tratados. Migration `auditoria_etapa_6` (catálogo mais leve), tela de erro em português, voltar do imóvel mantendo filtros e página, folha de filtros com foco preso, foto que não abre com miniatura e aviso, e testes novos (`testar_rls.sql`: 223 de 223). Bateria completa: 189 passando, 6 pulados e 1 falha instável fora do catálogo, em "Pendências"
 - 05/11/2026 · Gabriel · Etapa 7 concluída (7.4 e 7.5): auditoria sem nada crítico e os 18 achados tratados. Migration `auditoria_etapa_7` (banco recusa horário distante ou fora do minuto cheio, e cancelar guarda quando e quem), recado longo sem esticar a página, "Agendar visita" no rodapé do celular, calendário que atualiza quando o horário fecha, tela de erro da área do proprietário, redirecionamento de action sem o aviso de internet e 10 testes novos. `npm run test:e2e`: 227 passando e 7 pulados; `testar_rls.sql`: 266 de 266
+- 05/11/2026 · Gabriel · Decididos os campos da proposta (Etapa 8): valor, forma de pagamento (à vista, financiamento ou permuta), condições e nome do comprador, opcional e visto só pelo corretor que enviou, pelo proprietário do imóvel e pelo admin. Registrado na Visão geral e no CLAUDE.md
+- 05/11/2026 · Gabriel · Etapa 8, passo 8.1: plano aprovado. "Em negociação" passa a ser calculado das propostas aceitas e a coluna `tem_proposta_aceita` sai do banco; corretor reenvia depois de recusada, sem limite, e retira a proposta enquanto não há contrato; desfazer o aceite volta para aguardando. Registrado na Visão geral e no CLAUDE.md
+- 05/11/2026 · Gabriel · Etapa 8, passo 8.2: migration `propostas` aplicada, com "em negociação" calculado das propostas aceitas e a coluna `tem_proposta_aceita` apagada. `testar_rls.sql`: 315 de 315. Falta o 8.3 (telas e status)
+- 05/11/2026 · Gabriel · Etapa 8, passo 8.3: telas de proposta do corretor e do proprietário, abas em Negociações e na página do imóvel, selo "Em negociação" e contador em Meus imóveis. Falta a auditoria (8.4) e o fechamento (8.5)

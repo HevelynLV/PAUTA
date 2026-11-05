@@ -4582,8 +4582,9 @@ do $$ declare v text := ''; d uuid; n uuid; begin
     perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
     d := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
     n := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
-    update public.imoveis set tem_proposta_aceita = true where id = n;
     perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
+    insert into public.propostas (imovel_id, corretor_id, valor, forma_pagamento, condicoes, status)
+    values (n, '00000000-0000-4000-a000-000000000031', 450000, 'a_vista', 'Condições', 'aceita');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
     v := (select string_agg(status, ',' order by status) from public.catalogo(p_tipo => pg_temp.id_tipo_teste()));
     v := v || ' / ' || (select (bool_and(id = d))::text
@@ -5200,7 +5201,7 @@ do $$ declare v text; im uuid; begin
   end;
   insert into resultado (teste, esperado, obtido)
   values ('minhas_visitas() não traz dado do proprietário',
-          'bairro,criada_em,endereco,horario,id,imovel_id,recado,respondida_em,status,titulo', v);
+          'bairro,criada_em,endereco,horario,id,imovel_id,no_catalogo,recado,respondida_em,status,titulo', v);
 end $$;
 
 do $$ declare v text; im uuid; begin
@@ -5649,6 +5650,977 @@ do $$ declare v text; im uuid; vis uuid; begin
   end;
   insert into resultado (teste, esperado, obtido)
   values ('Remover o corretor guarda quem cancelou as visitas dele', 'cancelada / true / true', v);
+end $$;
+
+-- ---------------------------------------------------------------
+-- 17. Propostas (migration 20261105180815_propostas)
+-- ---------------------------------------------------------------
+
+-- Grava uma proposta direto, sem passar pelas regras, para montar a situação do teste.
+create or replace function pg_temp.criar_proposta(p_imovel uuid, p_corretor uuid,
+                                                  p_status text default 'aguardando',
+                                                  p_comprador text default null)
+returns uuid
+language sql
+as $$
+  insert into public.propostas (imovel_id, corretor_id, valor, forma_pagamento, condicoes, nome_comprador, status)
+  values (p_imovel, p_corretor, 450000, 'a_vista', 'Condições de teste', p_comprador, p_status::public.status_proposta)
+  returning id;
+$$;
+
+-- Texto da chamada de enviar_proposta, para o pg_temp.tentar.
+create or replace function pg_temp.enviar(p_imovel uuid, p_valor text default '450000',
+                                          p_condicoes text default 'Escritura em 60 dias',
+                                          p_comprador text default null,
+                                          p_forma text default 'a_vista')
+returns text
+language sql
+as $$
+  select format('select public.enviar_proposta(%L, %L, %L, %L, %L)',
+                p_imovel, p_valor, p_forma, p_condicoes, p_comprador);
+$$;
+
+-- Texto de um insert direto na tabela, com o corretor 31, para testar as regras dela.
+create or replace function pg_temp.inserir(p_imovel uuid, p_valor text, p_condicoes text, p_comprador text)
+returns text
+language sql
+as $$
+  select format('insert into public.propostas (imovel_id, corretor_id, valor, forma_pagamento, condicoes, nome_comprador)
+                 values (%L, %L, %L, %L, %L, %L)',
+                p_imovel, pg_temp.u(31), p_valor, 'a_vista', p_condicoes, p_comprador);
+$$;
+
+-- Enviar -------------------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform public.enviar_proposta(im, 450000.555, 'a_vista', '  Escritura em 60 dias  ', '  Ana Souza  ');
+    select status || ' / ' || valor || ' / ' || forma_pagamento || ' / ' || condicoes || ' / ' || nome_comprador
+           || ' / ' || (corretor_id = pg_temp.u(31)) || ' / ' || (respondida_em is null)
+    into v from public.propostas;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Assinante ativo envia proposta: nasce aguardando, com valor arredondado e textos aparados',
+          'aguardando / 450000.56 / a_vista / Escritura em 60 dias / Ana Souza / true / true', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform public.enviar_proposta(im, 450000, 'permuta', 'Condições', '   ');
+    select (nome_comprador is null)::text into v from public.propostas;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Nome do comprador em branco fica vazio',
+          'true', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    v := pg_temp.tentar(pg_temp.enviar(im));
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Responsável de imobiliária e corretor convidado enviam proposta',
+          'permitido / permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_assinante(pg_temp.u(33), 'pendente');
+    perform pg_temp.criar_assinante(pg_temp.u(34), 'bloqueado');
+    perform pg_temp.criar_assinante(pg_temp.u(35), 'vencido');
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    v := pg_temp.tentar(pg_temp.enviar(im));
+    perform pg_temp.entrar_como(pg_temp.u(34));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    perform pg_temp.entrar_como(pg_temp.u(35));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    perform pg_temp.entrar_como_visitante();
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Pendente, bloqueado, vencido, proprietário, admin e visitante não enviam proposta',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := pg_temp.tentar(pg_temp.enviar(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor removido não envia proposta',
+          'bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    perform pg_temp.cenario_de_visita();
+    im := pg_temp.criar_imovel(pg_temp.u(1), 'pendente');
+    p := pg_temp.criar_imovel(pg_temp.u(1), 'vendido');
+    q := pg_temp.criar_imovel(pg_temp.u(1), 'expirado');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar(im)) || ' / ' || pg_temp.tentar(pg_temp.enviar(p))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar(q))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar('00000000-0000-4000-a000-999999999999'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Imóvel fora do catálogo não recebe proposta (pendente, vendido, expirado, inexistente)',
+          'bloqueado (P0001) imovel_fora_do_catalogo / bloqueado (P0001) imovel_fora_do_catalogo / bloqueado (P0001) imovel_fora_do_catalogo / bloqueado (P0001) imovel_fora_do_catalogo', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    select string_agg(distinct resposta, ' | ') || ' × ' || count(*) into v
+    from (select pg_temp.tentar(pg_temp.enviar(im, x)) as resposta
+          from unnest(array['0', '-1', 'NaN', 'Infinity', '1000000000000', '0.001', null]::text[]) x) t;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Valor inválido é recusado: zero, negativo, NaN, Infinity, acima do teto, menos de um centavo e vazio',
+          'bloqueado (P0001) valor_invalido × 7', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar(im, '999999999999.99'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O maior valor que cabe na coluna é aceito',
+          'permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar(im, '450000', ''))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar(im, '450000', '   '))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar(im, '450000', null))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar(im, '450000', repeat('a', 1001)))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar(im, '450000', 'Condições', repeat('a', 121)))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar(im, '450000', 'Condições', null, null))
+      || ' / ' || pg_temp.tentar(pg_temp.enviar(im, '450000', repeat('a', 1000), repeat('a', 120)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Condições obrigatórias, até 1.000 caracteres; comprador até 120; forma de pagamento obrigatória',
+          'bloqueado (P0001) condicoes_invalidas / bloqueado (P0001) condicoes_invalidas / bloqueado (P0001) condicoes_invalidas / bloqueado (P0001) condicoes_invalidas / bloqueado (P0001) comprador_invalido / bloqueado (P0001) forma_invalida / permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.criar_proposta(p, pg_temp.u(31), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar(im)) || ' / ' || pg_temp.tentar(pg_temp.enviar(p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Uma proposta em aberto por corretor: aguardando ou aceita barram a segunda',
+          'bloqueado (P0001) proposta_em_aberto / bloqueado (P0001) proposta_em_aberto', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31), 'recusada');
+    perform pg_temp.criar_proposta(im, pg_temp.u(31), 'recusada');
+    perform pg_temp.criar_proposta(im, pg_temp.u(31), 'cancelada');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar(im));
+    v := v || ' / ' || (select count(*) from public.propostas where imovel_id = im);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Depois de recusada ou retirada, o corretor manda outra, sem limite',
+          'permitido / 4', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
+    perform pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar(im)) || ' / ' || pg_temp.tentar(pg_temp.enviar(p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Vários corretores no mesmo imóvel, mesmo em negociação, e o mesmo corretor em outro imóvel',
+          'permitido / permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.inserir(im, '1', 'x', 'y'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('A tabela barra sozinha a segunda proposta em aberto, mesmo sem passar pela função',
+          'bloqueado (23505)', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    v := pg_temp.tentar(pg_temp.inserir(im, '0', 'x', 'y'))
+      || ' / ' || pg_temp.tentar(pg_temp.inserir(im, 'NaN', 'x', 'y'))
+      || ' / ' || pg_temp.tentar(pg_temp.inserir(im, '1', '   ', 'y'))
+      || ' / ' || pg_temp.tentar(pg_temp.inserir(im, '1', 'x', '   '));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('A tabela barra valor zero, NaN, condições em branco e comprador em branco',
+          'bloqueado (23514) / bloqueado (23514) / bloqueado (23514) / bloqueado (23514)', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.inserir(im, '1', 'x', 'y'))
+      || ' / ' || pg_temp.tentar(format($s$update public.propostas set valor = 1 where id = %L$s$, p));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(format($s$update public.propostas set status = 'aceita' where id = %L$s$, p))
+      || ' / ' || pg_temp.tentar(format($s$delete from public.propostas where id = %L$s$, p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Ninguém grava direto na tabela: corretor nem dono inserem, alteram ou apagam',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+-- Ler ----------------------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.criar_proposta(im, pg_temp.u(32));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := (select count(*) from public.propostas where imovel_id = im);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := v || ' / ' || (select count(*) from public.propostas where imovel_id = im);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || (select count(*) from public.propostas where imovel_id = im);
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    v := v || ' / ' || (select count(*) from public.propostas where imovel_id = im);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || (select count(*) from public.propostas where imovel_id = im);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cada um lê o que é seu: corretor as próprias, dono as do imóvel, outro dono nada, admin todas',
+          '1 / 1 / 2 / 0 / 2', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'bloqueado');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := (select count(*) from public.propostas) || ' / ' || (select count(*) from public.minhas_propostas());
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || (select count(*) from public.propostas_recebidas(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor bloqueado não lê as próprias propostas e o dono continua lendo',
+          '0 / 0 / 1', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'vencido');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := (select count(*) from public.propostas) || ' / ' || (select count(*) from public.minhas_propostas());
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor vencido não lê as próprias propostas',
+          '0 / 0', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(21), 'recusada');
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := (select count(*) from public.propostas) || ' / ' || (select count(*) from public.minhas_propostas());
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor removido não lê as próprias propostas',
+          '0 / 0', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.entrar_como_visitante();
+    v := pg_temp.tentar('select * from public.propostas')
+      || ' / ' || pg_temp.tentar('select * from public.minhas_propostas()')
+      || ' / ' || pg_temp.tentar('select * from public.propostas_recebidas()')
+      || ' / ' || pg_temp.tentar('select * from public.resumo_de_propostas()');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Visitante não lê a tabela nem as funções de proposta',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_imovel(pg_temp.u(1), 'vendido');
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.criar_proposta(p, pg_temp.u(31), 'aceita', 'Ana');
+    perform pg_temp.criar_proposta(im, pg_temp.u(32));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    select count(*) || ' / ' || max(titulo) || ' / ' || max(nome_comprador)
+           || ' / ' || bool_and(no_catalogo) || ' / ' || bool_or(no_catalogo)
+    into v from public.minhas_propostas();
+    v := v || ' / ' || (select count(*) from public.minhas_propostas(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('minhas_propostas traz o imóvel mesmo vendido, o comprador, e só as do corretor',
+          '2 / Imóvel de teste / Ana / false / true / 1', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    select (pg_get_function_result('public.minhas_propostas(uuid)'::regprocedure) ~* 'propriet|telefone|email|mostrar')::text into v;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('As funções do corretor não devolvem nada do proprietário',
+          'false', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31), 'aguardando', 'Ana');
+    perform pg_temp.criar_proposta(im, pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select (corretor_nome is not null) || ' / ' || (creci is not null) || ' / ' || (telefone is not null)
+           || ' / ' || (email is not null) || ' / ' || nome_comprador || ' / ' || (imobiliaria is not null)
+    into v from public.propostas_recebidas(im) where nome_comprador is not null;
+    v := v || ' / ' || (select (imobiliaria is not null)::text from public.propostas_recebidas(im) where nome_comprador is null);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O dono vê nome, CRECI, contato, o comprador e, se houver, a imobiliária do corretor (RNF07)',
+          'true / true / true / true / Ana / false / true', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    v := (select count(*) from public.propostas_recebidas()) || ' / ' || (select count(*) from public.propostas_recebidas(im));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || (select count(*) from public.propostas_recebidas(im));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || (select count(*) from public.propostas_recebidas(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('propostas_recebidas não traz nada a outro dono, ao corretor nem ao admin',
+          '0 / 0 / 0 / 0', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    select count(*)::text into v
+    from unnest(array['public.catalogo(bigint, bigint[], numeric, numeric, integer, text, integer, integer)',
+                      'public.imovel_do_catalogo(uuid)', 'public.minhas_visitas(uuid)',
+                      'public.resumo_de_propostas(uuid)']) f
+    where pg_get_function_result(f::regprocedure) ~* 'comprador';
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O nome do comprador não sai pelo catálogo, pelas visitas nem pelo resumo',
+          '0', v);
+end $$;
+
+-- Responder ----------------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.aceitar_proposta(p);
+    select status || ' / ' || (respondida_em is not null) into v from public.propostas where id = p;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O dono aceita: guarda quando respondeu',
+          'aceita / true', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    q := pg_temp.criar_proposta(im, pg_temp.u(32));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format('select public.aceitar_proposta(%L)', p)) || ' / '
+      || pg_temp.tentar(format('select public.aceitar_proposta(%L)', q));
+    v := v || ' / ' || (select count(*) from public.propostas where imovel_id = im and status = 'aceita');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O dono pode ter várias propostas aceitas no mesmo imóvel',
+          'permitido / permitido / 2', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    v := pg_temp.tentar(format('select public.aceitar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(format('select public.aceitar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || pg_temp.tentar(format('select public.aceitar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(format('select public.aceitar_proposta(%L)', '00000000-0000-4000-a000-999999999999'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Outro dono, corretor, admin e proposta inexistente não aceitam, sem revelar nada',
+          'bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_nao_encontrada', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'recusada');
+    r := pg_temp.criar_proposta(im, pg_temp.u(32), 'cancelada');
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format('select public.aceitar_proposta(%L)', p)) || ' / '
+      || pg_temp.tentar(format('select public.aceitar_proposta(%L)', q)) || ' / '
+      || pg_temp.tentar(format('select public.aceitar_proposta(%L)', r));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Proposta já aceita, recusada ou cancelada não é aceita de novo',
+          'bloqueado (P0001) proposta_ja_respondida / bloqueado (P0001) proposta_ja_respondida / bloqueado (P0001) proposta_ja_respondida', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'vendido'), pg_temp.u(31));
+    q := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'expirado'), pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format('select public.aceitar_proposta(%L)', p)) || ' / '
+      || pg_temp.tentar(format('select public.aceitar_proposta(%L)', q));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Proposta de imóvel fora do catálogo não é aceita (vendido, expirado)',
+          'bloqueado (P0001) imovel_fora_do_catalogo / bloqueado (P0001) imovel_fora_do_catalogo', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'bloqueado');
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select status::text into v from public.propostas where id = p;
+    v := v || ' / ' || pg_temp.tentar(format('select public.aceitar_proposta(%L)', p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O dono responde mesmo com o corretor bloqueado: as propostas não mudam',
+          'aguardando / permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.recusar_proposta(p);
+    select status || ' / ' || (respondida_em is not null) into v from public.propostas where id = p;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O dono recusa: guarda quando respondeu',
+          'recusada / true', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    q := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'disponivel'), pg_temp.u(31), 'aceita');
+    r := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'disponivel'), pg_temp.u(31), 'recusada');
+    s := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'vendido'), pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    v := pg_temp.tentar(format('select public.recusar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_proposta(%L)', q))
+      || ' / ' || pg_temp.tentar(format('select public.recusar_proposta(%L)', r))
+      || ' / ' || pg_temp.tentar(format('select public.recusar_proposta(%L)', s));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Recusar: outro dono e corretor não recusam; aceita ou recusada não muda; imóvel vendido ainda limpa a lista',
+          'bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_ja_respondida / bloqueado (P0001) proposta_ja_respondida / permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.desfazer_aceite(p);
+    select status || ' / ' || (respondida_em is null) into v from public.propostas where id = p;
+    v := v || ' / ' || pg_temp.tentar(format('select public.aceitar_proposta(%L)', p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Desfazer o aceite devolve para aguardando, e o dono pode aceitar de novo',
+          'aguardando / true / permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32));
+    r := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'disponivel'), pg_temp.u(31), 'recusada');
+    s := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'vendido'), pg_temp.u(31), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    v := pg_temp.tentar(format('select public.desfazer_aceite(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(format('select public.desfazer_aceite(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(format('select public.desfazer_aceite(%L)', q))
+      || ' / ' || pg_temp.tentar(format('select public.desfazer_aceite(%L)', r))
+      || ' / ' || pg_temp.tentar(format('select public.desfazer_aceite(%L)', s));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Desfazer: outro dono e corretor não desfazem; só proposta aceita; imóvel vendido não volta atrás',
+          'bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_encerrada / bloqueado (P0001) proposta_encerrada / bloqueado (P0001) imovel_fora_do_catalogo', v);
+end $$;
+
+-- Retirar ------------------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    q := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'disponivel'), pg_temp.u(31), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform public.cancelar_proposta(p);
+    perform public.cancelar_proposta(q);
+    select status || ' / ' || (cancelada_em is not null) || ' / ' || (cancelada_por = pg_temp.u(31)) into v from public.propostas where id = p;
+    v := v || ' / ' || (select status from public.propostas where id = q);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O corretor retira a própria proposta, aguardando ou aceita, e fica guardado quem retirou',
+          'cancelada / true / true / cancelada', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    q := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'disponivel'), pg_temp.u(31), 'recusada');
+    r := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'disponivel'), pg_temp.u(31), 'cancelada');
+    s := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'vendido'), pg_temp.u(31), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := pg_temp.tentar(format('select public.cancelar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(format('select public.cancelar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || pg_temp.tentar(format('select public.cancelar_proposta(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(format('select public.cancelar_proposta(%L)', q))
+      || ' / ' || pg_temp.tentar(format('select public.cancelar_proposta(%L)', r))
+      || ' / ' || pg_temp.tentar(format('select public.cancelar_proposta(%L)', s));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Retirar: outro corretor, dono e admin não retiram; recusada ou cancelada não muda; imóvel vendido não volta atrás',
+          'bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_nao_encontrada / bloqueado (P0001) proposta_encerrada / bloqueado (P0001) proposta_encerrada / bloqueado (P0001) imovel_fora_do_catalogo', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'bloqueado');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('select public.cancelar_proposta(%L)', p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor bloqueado não retira a própria proposta',
+          'bloqueado (P0001) proposta_nao_encontrada', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    p := public.enviar_proposta(im, 450000, 'a_vista', 'Primeira');
+    v := pg_temp.tentar(format('select public.cancelar_proposta(%L)', p));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im, '470000'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Para melhorar uma proposta em aberto: retira e manda outra',
+          'permitido / permitido', v);
+end $$;
+
+-- Status no catálogo -------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_assinante(pg_temp.u(33), 'ativo');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    p := public.enviar_proposta(im, 450000, 'a_vista', 'Condições');
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    q := public.enviar_proposta(im, 460000, 'financiamento', 'Condições');
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    v := (select status from public.catalogo(p_tipo => pg_temp.id_tipo_teste()) c where c.id = im);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.aceitar_proposta(p);
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    v := v || ' / ' || (select status from public.imovel_do_catalogo(im));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.aceitar_proposta(q);
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    v := v || ' / ' || (select status from public.catalogo(p_tipo => pg_temp.id_tipo_teste()) c where c.id = im);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.desfazer_aceite(p);
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    v := v || ' / ' || (select status from public.imovel_do_catalogo(im));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.desfazer_aceite(q);
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    v := v || ' / ' || (select status from public.imovel_do_catalogo(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Pronto quando da Etapa 8: duas propostas aceitas deixam o imóvel em negociação; só sai quando a última deixa de valer',
+          'disponivel / em_negociacao / em_negociacao / em_negociacao / disponivel', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.criar_proposta(im, pg_temp.u(31), 'recusada');
+    perform pg_temp.criar_proposta(im, pg_temp.u(32), 'cancelada');
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := (select status from public.imovel_do_catalogo(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Proposta aguardando, recusada ou cancelada não deixa o imóvel em negociação',
+          'disponivel', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform public.cancelar_proposta(p);
+    v := (select status from public.imovel_do_catalogo(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Retirar a única proposta aceita tira o imóvel de negociação',
+          'disponivel', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(21), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(21), 'recusada');
+    r := pg_temp.criar_proposta(pg_temp.criar_imovel(pg_temp.u(1), 'disponivel'), pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select status::text into v from public.propostas where id = p;
+    v := v || ' / ' || (select status from public.propostas where id = r)
+           || ' / ' || (select status from public.propostas where id = q)
+           || ' / ' || (select cancelada_por = pg_temp.u(11) from public.propostas where id = p);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || (select status from public.imovel_do_catalogo(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Remover o corretor cancela as propostas em aberto, guarda quem cancelou, não mexe nas recusadas e tira o imóvel de negociação',
+          'cancelada / cancelada / recusada / true / disponivel', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    -- Assinante que já foi ativado não é excluído: só volta a pendente nos testes.
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'pendente');
+    delete from auth.users where id = pg_temp.u(31);
+    v := (select count(*) from public.propostas where imovel_id = im);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := v || ' / ' || (select status from public.imovel_do_catalogo(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Excluir a conta do corretor apaga a proposta e tira o imóvel de negociação',
+          '0 / disponivel', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    p := pg_temp.criar_imovel(pg_temp.u(1), 'vendido');
+    q := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
+    perform pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.criar_proposta(im, pg_temp.u(32));
+    perform pg_temp.criar_proposta(im, pg_temp.u(32), 'recusada');
+    perform pg_temp.criar_proposta(p, pg_temp.u(31), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select em_negociacao || ' / ' || em_aberto into v from public.resumo_de_propostas(im);
+    v := v || ' / ' || (select em_negociacao || ' / ' || em_aberto from public.resumo_de_propostas(p));
+    v := v || ' / ' || (select count(*) from public.resumo_de_propostas(q));
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    v := v || ' / ' || (select count(*) from public.resumo_de_propostas());
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || (select count(*) from public.resumo_de_propostas());
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Resumo do dono: selo e contagem das em aberto; vendido sem selo; imóvel sem proposta não aparece; outros não veem',
+          'true / 2 / false / 1 / 0 / 0 / 0', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('select public.imovel_em_negociacao(%L)', im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('O cálculo é interno: ninguém chama imovel_em_negociacao pela API',
+          'bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    select count(*)::text into v from information_schema.columns
+    where table_schema = 'public' and table_name = 'imoveis' and column_name = 'tem_proposta_aceita';
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('A coluna tem_proposta_aceita saiu de imoveis',
+          '0', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    n := (select versao from public.imoveis where id = im);
+    perform public.aceitar_proposta(p);
+    v := ((select versao from public.imoveis where id = im) - n)::text;
+    update public.imoveis set preco = 600000 where id = im;
+    v := v || ' / ' || ((select versao from public.imoveis where id = im) - n);
+    v := v || ' / ' || (select valor from public.propostas where id = p);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Aceitar não sobe a versão do imóvel; editar sobe, e a proposta guarda o valor enviado',
+          '0 / 1 / 450000.00', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_imovel(pg_temp.u(1), 'vendido');
+    perform pg_temp.criar_visita(im, pg_temp.u(31));
+    perform pg_temp.criar_visita(p, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := (select no_catalogo from public.minhas_visitas(im)) || ' / ' || (select no_catalogo from public.minhas_visitas(p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('minhas_visitas diz se o imóvel ainda está no catálogo',
+          'true / false', v);
 end $$;
 
 -- ---------------------------------------------------------------

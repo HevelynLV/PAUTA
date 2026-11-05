@@ -90,7 +90,7 @@ O que o app faz. Todos os 32 estão a construir no repositório novo (RF01 a RF0
 | RF20 | Catálogo | O corretor vê no catálogo só dois status: disponível ou em negociação (há proposta aceita). O imóvel continua recebendo visitas e propostas e sai do catálogo assim que o admin aprova o contrato | A construir |
 | RF21 | Visita | Corretor pede visita pelo app, sugerindo um horário | A construir |
 | RF22 | Visita | Proprietário confirma ou recusa a visita no app, e o corretor vê a resposta | A construir |
-| RF23 | Proposta | Corretor envia proposta com valor e condições | A construir |
+| RF23 | Proposta | Corretor envia proposta com valor, forma de pagamento, condições e, se quiser, o nome do comprador | A construir |
 | RF24 | Proposta | Proprietário aceita ou recusa cada proposta; pode ter várias aceitas ao mesmo tempo | A construir |
 | RF25 | Venda | Corretor envia o contrato assinado por todas as partes (PDF), só a partir de uma proposta dele já aceita pelo proprietário | A construir |
 | RF26 | Venda | Admin confere o contrato; ao aprovar, o imóvel vira vendido e todas as outras propostas em aberto são recusadas automaticamente. Ao recusar, escreve o motivo, o corretor é avisado e pode reenviar, e o imóvel segue em negociação com as outras propostas valendo | A construir |
@@ -148,6 +148,19 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 05/11/2026 (plano da Etapa 8)
+
+- Campos da proposta: valor, forma de pagamento (à vista, financiamento ou permuta), condições e nome do comprador. Na tela, vale o rótulo da decisão, não o do protótipo: "À vista", "Financiamento" e "Permuta".
+- O nome do comprador é opcional. É dado pessoal de outra pessoa: só o corretor que enviou, o proprietário do imóvel e o admin veem, e ele entra no plano de exclusão e anonimização da LGPD (passo 13.4).
+- "Em negociação" é calculado direto das propostas aceitas, e a coluna `imoveis.tem_proposta_aceita` sai do banco: assim aceitar, desfazer, recusar em massa e excluir conta não têm como deixar o status errado. O cálculo fica numa função só, usada também no selo do proprietário. Resolve a pendência da auditoria da Etapa 2.
+- Depois de recusada, o corretor pode mandar outra proposta, sem limite, porque o comprador sempre pode querer acrescentar algo à negociação. O limite vale só para proposta em aberto: uma por corretor em cada imóvel. O excesso de avisos fica para ser revisto na Etapa 10.
+- O corretor pode retirar a própria proposta, aguardando ou aceita, enquanto o contrato dela não foi enviado. Depois disso, pode mandar outra. Retirar evita o imóvel preso em negociação e é o caminho para melhorar uma proposta ainda em aberto.
+- Desfazer o aceite devolve a proposta para "aguardando": o proprietário ainda pode aceitar ou recusar.
+- Quando o responsável remove um corretor, as propostas em aberto dele são canceladas, como as visitas. A imobiliária continua a negociação mandando outra proposta por outro corretor.
+- Corretor bloqueado ou vencido: as propostas não mudam, porque o bloqueio é temporário, e o proprietário continua podendo responder. O corretor volta a vê-las quando recuperar o acesso.
+- O proprietário pode editar imóvel em negociação pela regra do imóvel disponível: vale na hora e fica registrado. A proposta guarda o valor enviado.
+- O proprietário responde às propostas na aba Propostas da página do imóvel, como no protótipo, sem aba geral em Meus imóveis. A lista mostra "N propostas" e o selo "Em negociação".
 
 ## Decisões tomadas em 05/11/2026 (auditoria da Etapa 7)
 
@@ -256,8 +269,8 @@ Decididas antes do passo 2.1, porque mudam tabelas ou status do banco.
 
 **Visita e proposta**
 - A visita não é obrigatória antes da proposta.
-- Cada corretor tem no máximo uma proposta em aberto (aguardando resposta ou aceita) por imóvel. Depois de recusada, pode mandar outra.
-- O proprietário pode desfazer o aceite de uma proposta enquanto o corretor não enviou o contrato dela; o corretor é avisado. Com contrato enviado, não pode mais.
+- Cada corretor tem no máximo uma proposta em aberto (aguardando resposta ou aceita) por imóvel. Depois de recusada ou retirada, pode mandar outra.
+- O proprietário pode desfazer o aceite de uma proposta enquanto o corretor não enviou o contrato dela; o corretor é avisado e a proposta volta a aguardar resposta. Com contrato enviado, não pode mais.
 
 **Contrato e venda**
 - Se o valor final do contrato for diferente do da proposta, vale o do contrato: o admin registra o valor final ao aprovar, e a proposta fica guardada como estava.

@@ -97,12 +97,9 @@ export function AgendarVisita({
 
   return (
     <>
-      {/* No celular, o rodapé fixo do protótipo (.foot); no site, dentro da coluna. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card px-5 pt-3 pb-[max(22px,env(safe-area-inset-bottom))] md:static md:z-auto md:border-0 md:bg-transparent md:p-0">
-        <Botao onClick={abrir} className="w-full">
-          Agendar visita
-        </Botao>
-      </div>
+      <Botao variante="secundario" onClick={abrir} className="w-full">
+        Agendar visita
+      </Botao>
       <dialog
         ref={janela}
         aria-labelledby={tituloId}

@@ -112,7 +112,7 @@ async function respostasDoServidor(page: Page, imovelId: string) {
   return { html, dados };
 }
 
-test("o corretor abre o imóvel pelo catálogo e vê fotos, dados, endereço e status, sem o botão da Etapa 8", async ({ browser }) => {
+test("o corretor abre o imóvel pelo catálogo e vê fotos, dados, endereço e status, com os botões de visita e proposta", async ({ browser }) => {
   const page = await paginaDe(browser, "ativo");
   await page.goto(`/assinante?${FAIXA}`);
   await page.getByRole("link", { name: /Casa detalhe com contato escondido/ }).click();
@@ -132,9 +132,9 @@ test("o corretor abre o imóvel pelo catálogo e vê fotos, dados, endereço e s
   for (const [valor, rotulo] of [["4", "quartos"], ["3", "banheiros"], ["2", "vagas"], ["220 m²", "área"]]) {
     await expect(principal.getByRole("definition").filter({ hasText: new RegExp(`^${valor}$`) }).first(), rotulo).toBeVisible();
   }
-  // A visita entrou na Etapa 7 (e2e/visitas.spec.ts); a proposta entra na Etapa 8.
+  // Os fluxos estão em e2e/visitas.spec.ts e e2e/propostas.spec.ts.
   await expect(page.getByRole("button", { name: "Agendar visita" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Enviar proposta" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Enviar proposta" })).toBeVisible();
 
   // Volta ao catálogo (no celular, o botão por cima da foto; no computador, o caminho).
   const voltar = test.info().project.name === "celular"
