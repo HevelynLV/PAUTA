@@ -153,7 +153,7 @@ test("o corretor agenda, o proprietário confirma e o corretor vê a resposta", 
   await expect(janela(ana).getByRole("heading", { name: "Pedido enviado" })).toBeVisible();
   await janela(ana).getByRole("button", { name: "Fechar" }).click();
 
-  await ana.goto("/assinante/negociacoes");
+  await ana.goto("/assinante/negociacoes?aba=visitas");
   await expect(cartao(ana, titulo)).toContainText("Aguardando");
   await expect(cartao(ana, titulo)).toContainText(`${diaEMes(dia)} às 14:00`);
 
@@ -178,7 +178,7 @@ test("o corretor agenda, o proprietário confirma e o corretor vê a resposta", 
   await expect(dono.getByRole("listitem").filter({ hasText: "Ana Corretora" })).toContainText("Confirmada");
 
   // Corretor: vê a resposta.
-  await ana.goto("/assinante/negociacoes");
+  await ana.goto("/assinante/negociacoes?aba=visitas");
   await expect(cartao(ana, titulo)).toContainText("Confirmada");
 
   // Outro corretor: o horário está fechado, e nada diz quem marcou.
@@ -230,7 +230,7 @@ test("dois corretores pedem o mesmo horário: confirmar um recusa o outro", asyn
   await expect(dono.getByRole("listitem").filter({ hasText: "Beto Corretor" })).toContainText("Recusada");
 
   const beto = await paginaDe(browser, "beto");
-  await beto.goto("/assinante/negociacoes");
+  await beto.goto("/assinante/negociacoes?aba=visitas");
   await expect(cartao(beto, titulo)).toContainText("Recusada");
 });
 
@@ -279,7 +279,7 @@ test("recusar deixa o horário livre", async ({ browser }) => {
   await expect(pedido).toContainText("Recusada");
 
   const ana = await paginaDe(browser, "ana");
-  await ana.goto("/assinante/negociacoes");
+  await ana.goto("/assinante/negociacoes?aba=visitas");
   await expect(cartao(ana, titulo)).toContainText("Recusada");
   await ana.goto(`/assinante/imoveis/${imovel}`);
   await abrirCalendario(ana);
@@ -294,7 +294,7 @@ test("corretor e proprietário cancelam, e o horário reabre", async ({ browser 
   await criarVisita(imovel, "beto", instanteDe(dia, "10:00"), "confirmada");
 
   const ana = await paginaDe(browser, "ana");
-  await ana.goto("/assinante/negociacoes");
+  await ana.goto("/assinante/negociacoes?aba=visitas");
   await cartao(ana, titulo).getByRole("button", { name: "Cancelar visita" }).click();
   await ana.getByRole("dialog", { name: "Cancelar a visita?" }).getByRole("button", { name: "Cancelar visita" }).click();
   await expect(cartao(ana, titulo)).toContainText("Cancelada");
@@ -339,7 +339,7 @@ test("pedido sem resposta cujo horário passou aparece como Horário passou", as
   await criarVisita(imovel, "ana", new Date(Date.now() - 3_600_000).toISOString());
 
   const ana = await paginaDe(browser, "ana");
-  await ana.goto("/assinante/negociacoes");
+  await ana.goto("/assinante/negociacoes?aba=visitas");
   await expect(cartao(ana, titulo)).toContainText("Horário passou");
   await expect(cartao(ana, titulo).getByRole("button", { name: "Cancelar visita" })).toHaveCount(0);
 });

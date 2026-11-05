@@ -10,13 +10,14 @@ import { SeloStatus, type Status } from "@/components/ui/SeloStatus";
 import { exigirTipo } from "@/lib/auth";
 import { formatarData, formatarPreco } from "@/lib/imovel";
 import { imoveisDoDono, type ImovelNaLista } from "@/lib/imoveis";
+import { resumoDePropostas, type ResumoDePropostas } from "@/lib/propostas";
 import { pedidosParaConfirmar } from "@/lib/visitas";
 
 export const metadata: Metadata = { title: "Meus imóveis" };
 
 // "Meus imóveis" (ProImoveis no celular, SiteProImoveis no computador): os imóveis
-// do proprietário com o status de cada um. "Em negociação" e "contrato em análise"
-// chegam com as propostas e os contratos (Etapas 8 e 9); editar e reenviar, no 4.6.
+// do proprietário com o status de cada um. "Em negociação" vem do banco, por
+// resumoDePropostas; "contrato em análise" chega com os contratos (Etapa 9).
 export default function MeusImoveis({ searchParams }: PageProps<"/proprietario">) {
   return (
     <Suspense fallback={<p className="px-5 pt-[22px] text-ink2">Carregando…</p>}>
@@ -27,9 +28,10 @@ export default function MeusImoveis({ searchParams }: PageProps<"/proprietario">
 
 async function Conteudo({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const usuario = await exigirTipo("proprietario");
-  const [imoveis, pedidos, { apagado }] = await Promise.all([
+  const [imoveis, pedidos, propostas, { apagado }] = await Promise.all([
     imoveisDoDono(usuario.id),
     pedidosParaConfirmar(new Date()),
+    resumoDePropostas(),
     searchParams,
   ]);
 
@@ -67,7 +69,7 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
       ) : (
         <ul className="flex flex-col gap-2.5 md:grid md:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] md:gap-5">
           {imoveis.map((imovel) => (
-            <CartaoDoImovel key={imovel.id} imovel={imovel} paraConfirmar={pedidos.get(imovel.id) ?? 0} />
+            <CartaoDoImovel key={imovel.id} imovel={imovel} paraConfirmar={pedidos.get(imovel.id) ?? 0} propostas={propostas.get(imovel.id)} />
           ))}
         </ul>
       )}
@@ -87,7 +89,17 @@ const seloDo: Record<ImovelNaLista["status"], Status> = {
 
 const podeApagar = (status: ImovelNaLista["status"]) => ["rascunho", "pendente", "reprovado"].includes(status);
 
-function CartaoDoImovel({ imovel, paraConfirmar }: { imovel: ImovelNaLista; paraConfirmar: number }) {
+function CartaoDoImovel({
+  imovel,
+  paraConfirmar,
+  propostas,
+}: {
+  imovel: ImovelNaLista;
+  paraConfirmar: number;
+  propostas?: ResumoDePropostas;
+}) {
+  const selo: Status = propostas?.emNegociacao ? "negociacao" : seloDo[imovel.status];
+  const emAberto = propostas?.emAberto ?? 0;
   // O rascunho continua o cadastro (a partir das fotos); os outros abrem a página do imóvel.
   // O captado abre o aceite do termo (passo 4.7).
   const destino =
@@ -107,12 +119,12 @@ function CartaoDoImovel({ imovel, paraConfirmar }: { imovel: ImovelNaLista; para
         style={imovel.capa ? { backgroundImage: `url("${imovel.capa}")` } : undefined}
       >
         <span className="hidden md:inline-flex">
-          <SeloStatus status={seloDo[imovel.status]}>{imovel.status === "captado" ? "Aguardando seu aceite" : undefined}</SeloStatus>
+          <SeloStatus status={selo}>{imovel.status === "captado" ? "Aguardando seu aceite" : undefined}</SeloStatus>
         </span>
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1 md:px-4 md:pb-4 md:pt-3.5">
         <span className="md:hidden">
-          <SeloStatus status={seloDo[imovel.status]}>{imovel.status === "captado" ? "Aguardando seu aceite" : undefined}</SeloStatus>
+          <SeloStatus status={selo}>{imovel.status === "captado" ? "Aguardando seu aceite" : undefined}</SeloStatus>
         </span>
         {/* O link cobre o cartão inteiro (after:inset-0); os botões ficam por cima. */}
         <Link href={destino} className="font-bold text-ink no-underline after:absolute after:inset-0 after:content-['']">
@@ -136,6 +148,11 @@ function CartaoDoImovel({ imovel, paraConfirmar }: { imovel: ImovelNaLista; para
         {paraConfirmar > 0 && (
           <span className="text-tiny font-bold text-mar">
             {paraConfirmar} {paraConfirmar === 1 ? "visita" : "visitas"} para confirmar
+          </span>
+        )}
+        {emAberto > 0 && (
+          <span className="text-tiny font-bold text-mar">
+            {emAberto} {emAberto === 1 ? "proposta" : "propostas"}
           </span>
         )}
 

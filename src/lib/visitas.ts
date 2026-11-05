@@ -15,6 +15,7 @@ export type VisitaDoCorretor = {
   titulo: string;
   endereco: string;
   bairro: string;
+  no_catalogo: boolean;
   horario: string;
   recado: string | null;
   status: StatusVisita;

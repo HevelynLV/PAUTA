@@ -5,6 +5,7 @@ import { Suspense } from "react";
 
 import { GaleriaDoImovel } from "@/components/catalogo/GaleriaDoImovel";
 import { SeloStatus } from "@/components/ui/SeloStatus";
+import { EnviarProposta } from "@/components/proposta/EnviarProposta";
 import { AgendarVisita } from "@/components/visita/AgendarVisita";
 import { exigirTipo, TIPOS_ASSINANTE } from "@/lib/auth";
 import { type ImovelDoCatalogo, imovelDoCatalogo } from "@/lib/catalogo";
@@ -12,15 +13,17 @@ import { formatarTelefone } from "@/lib/conta";
 import { lerFiltros, urlDoCatalogo } from "@/lib/filtrosCatalogo";
 import { diaDe, formatarHorario, seloDaVisita } from "@/lib/horariosDeVisita";
 import { formatarPreco } from "@/lib/imovel";
+import { propostaEmAberto, rotuloDaForma, seloDaProposta } from "@/lib/proposta";
+import { minhasPropostas } from "@/lib/propostas";
 import { horariosOcupados, minhasVisitas } from "@/lib/visitas";
 
 export const metadata: Metadata = { title: "Imóvel" };
 
 // Detalhe do imóvel para o corretor (RF18 a RF20, passo 6.3):
 // docs/prototipo/CorImovel.dc.html (celular) e SiteCorImovel.dc.html (site).
-// "Enviar proposta" fica escondido até a Etapa 8 (decisão de 03/11/2026). O
-// agendamento de visita (Etapa 7) é um calendário, não a tela CorVisita do protótipo
-// (decisão de 04/11/2026).
+// O agendamento de visita (Etapa 7) é um calendário, não a tela CorVisita do protótipo
+// (decisão de 04/11/2026). A proposta (Etapa 8) abre na mesma janela, e não na tela
+// CorProposta; ?proposta=1 já chega com ela aberta.
 //
 // O contato do proprietário (RNF06) só existe aqui se o banco o devolveu: ele é
 // montado no servidor e, quando está escondido, nada dele chega ao navegador.
@@ -42,16 +45,22 @@ async function Conteudo({
   await exigirTipo(TIPOS_ASSINANTE);
   const { id } = await params;
   // A busca veio junto do card. Passa por lerFiltros: o voltar nunca leva para fora.
-  const filtros = lerFiltros(await searchParams);
+  const busca = await searchParams;
+  const filtros = lerFiltros(busca);
   const voltar = urlDoCatalogo(filtros, { pagina: filtros.pagina });
   const imovel = await imovelDoCatalogo(id);
   if (!imovel) notFound();
 
   const agora = new Date();
-  const [ocupados, visitas] = await Promise.all([horariosOcupados(id), minhasVisitas(id)]);
+  const [ocupados, visitas, propostas] = await Promise.all([horariosOcupados(id), minhasVisitas(id), minhasPropostas(id)]);
   const abertas = visitas
     .filter((visita) => ["pendente", "confirmada"].includes(visita.status) && new Date(visita.horario) > agora)
     .reverse();
+
+  // Uma em aberto por vez; se não há, a mais recente diz se foi recusada.
+  const propostaAberta = propostas.find((proposta) => propostaEmAberto(proposta.status));
+  const recusada = !propostaAberta && propostas[0]?.status === "recusada";
+  const seloProposta = propostaAberta && seloDaProposta(propostaAberta.status, "corretor");
 
   const preco = formatarPreco(imovel.preco);
   const endereco = `${imovel.endereco} · ${imovel.bairro} · Florianópolis`;
@@ -99,13 +108,38 @@ async function Conteudo({
         <div className="flex flex-col gap-3 md:sticky md:top-8">
           <div className="flex flex-col gap-3.5 md:rounded-cartao md:border md:border-line md:bg-card md:p-[22px]">
             <span className="hidden font-display text-[28px] font-bold md:block">{preco}</span>
-            <AgendarVisita
-              imovelId={imovel.id}
-              hoje={diaDe(agora)}
-              agora={agora.toISOString()}
-              ocupados={ocupados}
-              meusPedidos={abertas.map((visita) => visita.horario)}
-            />
+            {/* No celular, o rodapé fixo do protótipo (.foot); no site, dentro da coluna. */}
+            <div className="fixed inset-x-0 bottom-0 z-20 flex gap-2.5 border-t border-line bg-card px-5 pt-3 pb-[max(22px,env(safe-area-inset-bottom))] md:static md:z-auto md:flex-col md:border-0 md:bg-transparent md:p-0">
+              <AgendarVisita
+                imovelId={imovel.id}
+                hoje={diaDe(agora)}
+                agora={agora.toISOString()}
+                ocupados={ocupados}
+                meusPedidos={abertas.map((visita) => visita.horario)}
+              />
+              <EnviarProposta
+                imovelId={imovel.id}
+                titulo={imovel.titulo}
+                preco={imovel.preco}
+                temEmAberto={Boolean(propostaAberta)}
+                abrirAoCarregar={busca.proposta === "1"}
+              />
+            </div>
+            {propostaAberta && seloProposta && (
+              <div className="flex flex-col gap-1.5">
+                <b className="text-small">Sua proposta neste imóvel</b>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-small">
+                  <span>
+                    {formatarPreco(propostaAberta.valor)} · {rotuloDaForma(propostaAberta.forma_pagamento)}
+                  </span>
+                  <SeloStatus status={seloProposta.status}>{seloProposta.rotulo}</SeloStatus>
+                </div>
+                <Link href="/assinante/negociacoes" className="text-small font-bold text-mar">
+                  Ver minhas negociações
+                </Link>
+              </div>
+            )}
+            {recusada && <p className="text-small text-ink2">Sua última proposta foi recusada. Você pode enviar outra.</p>}
             {abertas.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <b className="text-small">Suas visitas neste imóvel</b>
@@ -120,7 +154,7 @@ async function Conteudo({
                     );
                   })}
                 </ul>
-                <Link href="/assinante/negociacoes" className="text-small font-bold text-mar">
+                <Link href="/assinante/negociacoes?aba=visitas" className="text-small font-bold text-mar">
                   Ver em Negociações
                 </Link>
               </div>
