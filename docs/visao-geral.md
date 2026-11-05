@@ -149,6 +149,26 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
 
+## Decisões tomadas em 05/11/2026 (auditoria da Etapa 7)
+
+- O banco recusa pedido de visita a mais de 15 dias ou fora do minuto cheio. Os 14 dias e a lista de horários continuam sendo regra de tela: o teto do banco existe para ninguém pular a tela pela API, com horário infinito, muito distante ou um segundo depois de um horário confirmado. Segue sem limite de pedidos por hora.
+- Cancelar uma visita guarda quando e quem cancelou, para os avisos da Etapa 10.
+- No celular, "Agendar visita" fica no rodapé fixo da página do imóvel, como no protótipo.
+
+## Decisões tomadas em 04/11/2026 (plano da Etapa 7)
+
+- Na página do imóvel, o corretor agenda a visita num calendário: próximos 14 dias, horários fixos do protótipo (09:00, 10:00, 11:00, 14:00, 15:30 e 17:00), recado opcional de até 500 caracteres. Os horários valem na tela; o banco exige horário futuro, de minuto cheio e a até 15 dias (auditoria da Etapa 7, 05/11/2026), então a lista pode mudar sem migration.
+- Só a visita confirmada fecha o horário. Horário fechado aparece riscado para todos os corretores, sem mostrar quem marcou: outro corretor continua sem ver os pedidos de ninguém.
+- Vários corretores podem pedir o mesmo horário enquanto ninguém foi confirmado, e o proprietário escolhe um. Ao confirmar, os outros pedidos daquele imóvel e horário são recusados na mesma operação, e cada corretor vê a recusa.
+- Um corretor pode ter várias visitas no mesmo imóvel, sem limite, desde que em horários diferentes.
+- O proprietário só confirma ou recusa, sem escrever motivo nem sugerir outro horário: um texto dele abriria um caminho para passar o contato escondido.
+- O proprietário vê também o CRECI do corretor, além de nome, imobiliária e contato.
+- O corretor cancela a própria visita pendente ou confirmada, e o proprietário cancela a confirmada. Cancelar uma visita confirmada reabre o horário; os pedidos já recusados não voltam.
+- Em Meus imóveis, o proprietário tem uma aba Visitas com a agenda de todos os seus imóveis e a lista das próximas visitas: no computador, a semana com dias e horários; no celular, uma faixa com os dias e a lista do dia escolhido. Ele confirma e recusa ali. A página de cada imóvel mostra só as visitas daquele imóvel, com a mesma peça. Essa tela não existe no protótipo.
+- O corretor acompanha as visitas em Negociações, na aba Visitas; a aba Propostas entra na Etapa 8.
+- Quando o responsável remove um corretor, as visitas em aberto dele são canceladas. Para corretor bloqueado ou vencido, a visita continua visível ao proprietário e a regra completa fica para a Etapa 11.
+- Pedido pendente cujo horário passou não pode mais ser confirmado e aparece como "Horário passou", sem tarefa automática.
+
 ## Decisões tomadas em 03/11/2026 (plano da Etapa 6)
 
 - O assinante não lê mais a tabela de imóveis direto: o catálogo e o detalhe vêm de funções do banco que devolvem só as colunas do corretor (sem `proprietario_id`, `exclusividade_fim`, `termo_versao`, `captado_pelo_admin` nem `versao`). As fotos continuam visíveis para ele por uma função auxiliar. Resolve a pendência da auditoria da Etapa 2.

@@ -5,17 +5,20 @@ import { Suspense } from "react";
 
 import { classesBotao } from "@/components/ui/Botao";
 import { SeloStatus, type Status } from "@/components/ui/SeloStatus";
+import { ListaDeVisitas } from "@/components/visita/CartaoDeVisita";
 import { exigirTipo } from "@/lib/auth";
+import { diaDe, instanteDe } from "@/lib/horariosDeVisita";
 import { formatarData, formatarPreco } from "@/lib/imovel";
 import { capaDoImovel, imovelDoDono, type StatusImovel } from "@/lib/imoveis";
+import { agendaDeVisitas } from "@/lib/visitas";
 
 import { ContatoDoImovel } from "./ContatoDoImovel";
 
 export const metadata: Metadata = { title: "Imóvel" };
 
-// Página do imóvel do proprietário (ProImovel e SiteProImovel), por enquanto sem as
-// abas de visitas e propostas (Etapas 7 e 8): o "Editar", a foto
-// de capa, os dados, a exclusividade e a escolha de mostrar o contato (RF13).
+// Página do imóvel do proprietário (ProImovel e SiteProImovel), por enquanto sem a
+// aba de propostas (Etapa 8): o "Editar", a foto de capa, os dados, a exclusividade,
+// a escolha de mostrar o contato (RF13) e as visitas daquele imóvel.
 export default function PaginaDoImovel({ params, searchParams }: PageProps<"/proprietario/imoveis/[id]">) {
   return (
     <Suspense fallback={<p className="px-5 pt-[22px] text-ink2">Carregando…</p>}>
@@ -52,6 +55,12 @@ async function Conteudo({
 
   // Depois de vendido, o contato não muda mais nada (o imóvel saiu do catálogo).
   const podeMudarContato = ["pendente", "reprovado", "disponivel"].includes(imovel.status);
+
+  // Só imóvel que passou pelo catálogo tem visitas. Do dia de hoje em diante.
+  const agora = new Date();
+  const visitas = ["disponivel", "vendido", "expirado"].includes(imovel.status)
+    ? await agendaDeVisitas({ imovelId: id, de: instanteDe(diaDe(agora), "00:00") })
+    : null;
 
   return (
     <div className="flex flex-col pb-7 md:px-10 md:pt-8">
@@ -115,6 +124,22 @@ async function Conteudo({
           )}
 
           {podeMudarContato && <ContatoDoImovel id={imovel.id} mostrar={imovel.mostrar_contato} />}
+
+          {visitas && (
+            <section className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-display text-t2 font-bold tracking-[-0.01em]">Visitas</h2>
+                <Link href="/proprietario/visitas" className="text-small font-bold text-mar">
+                  Ver agenda
+                </Link>
+              </div>
+              {visitas.length === 0 ? (
+                <p className="text-small text-ink2">Nenhum pedido de visita por enquanto.</p>
+              ) : (
+                <ListaDeVisitas visitas={visitas} agora={agora} comImovel={false} />
+              )}
+            </section>
+          )}
         </div>
       </div>
     </div>

@@ -3,12 +3,14 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { BotaoApagarImovel } from "@/components/imovel/BotaoApagarImovel";
+import { AbasDoProprietario } from "@/components/visita/AbasDoProprietario";
 import { classesBotao } from "@/components/ui/Botao";
 import { Cartao } from "@/components/ui/Cartao";
 import { SeloStatus, type Status } from "@/components/ui/SeloStatus";
 import { exigirTipo } from "@/lib/auth";
 import { formatarData, formatarPreco } from "@/lib/imovel";
 import { imoveisDoDono, type ImovelNaLista } from "@/lib/imoveis";
+import { pedidosParaConfirmar } from "@/lib/visitas";
 
 export const metadata: Metadata = { title: "Meus imóveis" };
 
@@ -25,7 +27,11 @@ export default function MeusImoveis({ searchParams }: PageProps<"/proprietario">
 
 async function Conteudo({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const usuario = await exigirTipo("proprietario");
-  const [imoveis, { apagado }] = await Promise.all([imoveisDoDono(usuario.id), searchParams]);
+  const [imoveis, pedidos, { apagado }] = await Promise.all([
+    imoveisDoDono(usuario.id),
+    pedidosParaConfirmar(new Date()),
+    searchParams,
+  ]);
 
   return (
     <div className="flex w-full max-w-[1140px] flex-col gap-4 px-5 pb-7 pt-[22px] md:gap-6 md:px-10 md:pt-8">
@@ -43,6 +49,8 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
         </Link>
       </div>
 
+      <AbasDoProprietario aba="imoveis" paraConfirmar={[...pedidos.values()].reduce((soma, n) => soma + n, 0)} />
+
       {apagado === "1" && (
         <p role="status" className="rounded-[14px] bg-mar-soft px-3.5 py-3 text-small text-mar-dark">
           O imóvel e as fotos dele foram apagados.
@@ -59,7 +67,7 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
       ) : (
         <ul className="flex flex-col gap-2.5 md:grid md:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] md:gap-5">
           {imoveis.map((imovel) => (
-            <CartaoDoImovel key={imovel.id} imovel={imovel} />
+            <CartaoDoImovel key={imovel.id} imovel={imovel} paraConfirmar={pedidos.get(imovel.id) ?? 0} />
           ))}
         </ul>
       )}
@@ -79,7 +87,7 @@ const seloDo: Record<ImovelNaLista["status"], Status> = {
 
 const podeApagar = (status: ImovelNaLista["status"]) => ["rascunho", "pendente", "reprovado"].includes(status);
 
-function CartaoDoImovel({ imovel }: { imovel: ImovelNaLista }) {
+function CartaoDoImovel({ imovel, paraConfirmar }: { imovel: ImovelNaLista; paraConfirmar: number }) {
   // O rascunho continua o cadastro (a partir das fotos); os outros abrem a página do imóvel.
   // O captado abre o aceite do termo (passo 4.7).
   const destino =
@@ -125,6 +133,11 @@ function CartaoDoImovel({ imovel }: { imovel: ImovelNaLista }) {
           <span className="text-tiny text-ink2">Exclusividade até {formatarData(imovel.exclusividade_fim)}</span>
         )}
         {imovel.status === "vendido" && <span className="text-tiny text-ink2">Não aparece mais no catálogo.</span>}
+        {paraConfirmar > 0 && (
+          <span className="text-tiny font-bold text-mar">
+            {paraConfirmar} {paraConfirmar === 1 ? "visita" : "visitas"} para confirmar
+          </span>
+        )}
 
         {(imovel.status === "pendente" || imovel.status === "reprovado" || imovel.status === "rascunho") && (
           <div className="relative z-10 flex flex-wrap gap-x-3.5 self-start">
