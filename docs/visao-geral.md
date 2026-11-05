@@ -149,9 +149,15 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
 
+## Decisões tomadas em 05/11/2026 (auditoria da Etapa 7)
+
+- O banco recusa pedido de visita a mais de 15 dias ou fora do minuto cheio. Os 14 dias e a lista de horários continuam sendo regra de tela: o teto do banco existe para ninguém pular a tela pela API, com horário infinito, muito distante ou um segundo depois de um horário confirmado. Segue sem limite de pedidos por hora.
+- Cancelar uma visita guarda quando e quem cancelou, para os avisos da Etapa 10.
+- No celular, "Agendar visita" fica no rodapé fixo da página do imóvel, como no protótipo.
+
 ## Decisões tomadas em 04/11/2026 (plano da Etapa 7)
 
-- Na página do imóvel, o corretor agenda a visita num calendário: próximos 14 dias, horários fixos do protótipo (09:00, 10:00, 11:00, 14:00, 15:30 e 17:00), recado opcional de até 500 caracteres. Os horários valem na tela; o banco só exige horário futuro, então a lista pode mudar sem migration.
+- Na página do imóvel, o corretor agenda a visita num calendário: próximos 14 dias, horários fixos do protótipo (09:00, 10:00, 11:00, 14:00, 15:30 e 17:00), recado opcional de até 500 caracteres. Os horários valem na tela; o banco exige horário futuro, de minuto cheio e a até 15 dias (auditoria da Etapa 7, 05/11/2026), então a lista pode mudar sem migration.
 - Só a visita confirmada fecha o horário. Horário fechado aparece riscado para todos os corretores, sem mostrar quem marcou: outro corretor continua sem ver os pedidos de ninguém.
 - Vários corretores podem pedir o mesmo horário enquanto ninguém foi confirmado, e o proprietário escolhe um. Ao confirmar, os outros pedidos daquele imóvel e horário são recusados na mesma operação, e cada corretor vê a recusa.
 - Um corretor pode ter várias visitas no mesmo imóvel, sem limite, desde que em horários diferentes.
