@@ -2,15 +2,15 @@
 
 ## Onde paramos
 
-Última atualização: 05/11/2026 · por Hevelyn
-Etapa atual: 8. Proposta. Passos 8.1 a 8.3 feitos, e o Pull Request #9 já entrou na `main`. Próximo: numa sessão nova (`/clear`), rodar `/auditar-etapa 8` (passo 8.4), que inclui uma rodada completa do `npm run test:e2e`, e depois fechar no 8.5. O `etapa-8-proposta` foi para a `main` antes desses dois passos: as correções do 8.5 precisam de uma branch nova
+Última atualização: 06/11/2026 · por Hevelyn
+Etapa atual: 8. Proposta. Passos 8.1 a 8.3 feitos, e o Pull Request #9 já entrou na `main`. Próximo: fazer o merge do Pull Request da branch `melhorias-cadastro-agenda` e, com a `main` atualizada, numa sessão nova (`/clear`), rodar `/auditar-etapa 8` (passo 8.4), que inclui uma rodada completa do `npm run test:e2e`, e depois fechar no 8.5. O `etapa-8-proposta` foi para a `main` antes desses dois passos: as correções do 8.5 precisam de uma branch nova
 
-Melhorias dos testes de uso (05/11/2026, Hevelyn), na branch `melhorias-cadastro-agenda`:
+Melhorias dos testes de uso (05 e 06/11/2026, Hevelyn), na branch `melhorias-cadastro-agenda`:
 - Telefone só de celular (DDD + 9 + 8 dígitos), na tela, no servidor e no banco; `CampoTelefone` com máscara, aceitando 0 e +55 colados, em cadastro, convite e Minha conta. Exemplos dentro dos campos nas telas de criar conta e de convite
 - Agenda do proprietário: o título da semana abre o `CalendarioDaAgenda`, com mês, lista dos 12 meses e ano, até 5 anos para cada lado, e ponto nos dias com visita em aberto
 - Testes contra o build de produção (`npx next start -p 3000`, configuração `pauta-producao` no `.claude/launch.json`), sem a migration aplicada: computador 124 passando, 7 pulados e 1 falha esperada (`/teste-conexao` dá 404 em produção); celular 129 passando, 1 pulado, a mesma falha esperada e 1 falha de `catalogo.spec.ts`, que lia a lista antes de ela aparecer. Corrigido o teste, ele passou 6 de 6 sozinho; não houve outra rodada completa. Lint e build passam
 - Lição: com pouca memória (448 MB livres de 7,8 GB), o `npm run dev` parou 24 e 29 minutos compactando o cache, e a bateria levou 1h18 só no celular. Contra o build de produção, cada tamanho leva cerca de 7 minutos
-- Falta aplicar a migration `20261105230359_telefone_so_celular` (ver "Atenção")
+- Migration `20261105230359_telefone_so_celular` aplicada em 06/11/2026 (ver "Atenção"). `testar_rls.sql`: 317 de 317. Falta o push e o Pull Request desta branch para a `main`: até lá, o `db push` de outra branch recusa, porque o arquivo da migration ainda não está no GitHub
 
 Etapa 8, em resumo: o corretor envia a proposta pela página do imóvel, com valor, forma de pagamento, condições e, se quiser, o nome do comprador. O proprietário vê os dados do corretor e aceita, recusa ou desfaz o aceite, e pode ter várias aceitas ao mesmo tempo. Com pelo menos uma aceita, o imóvel aparece como "Em negociação" no catálogo. Depois de recusada ou retirada, o corretor pode mandar outra. O envio do contrato entra na Etapa 9
 
@@ -331,7 +331,7 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - Next.js 16.4.2 (só no `npm run dev`): enviar o formulário do cadastro sem JavaScript (antes de a página carregar) dá `InvariantError: Received an underlying cookies object that does not match either cookies or mutableCookies`, que o próprio Next chama de bug dele. Com JavaScript (o normal), funciona. Conferir de novo com o `npm run build` + `npm start` e, se continuar, abrir um aviso no Next
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
 - Etapa 8:
-  - Falta a auditoria (8.4) e o fechamento (8.5): a etapa fica `[ ]` até lá, mesmo com o Pull Request aberto. A última bateria completa (250 passando, 8 pulados, 2 falhando) foi antes de corrigir o localizador de `e2e/propostas.spec.ts`; falta uma rodada completa limpa
+  - Falta a auditoria (8.4) e o fechamento (8.5): a etapa fica `[ ]` até lá, mesmo com o código já na `main`. A rodada contra o build de produção de 05/11/2026 só teve a falha esperada de `/teste-conexao` e a de `catalogo.spec.ts`, depois corrigida no teste; falta uma rodada completa limpa, com a migration do celular aplicada
   - Sem teste: duas operações ao mesmo tempo (ex.: dois corretores enviando ou o dono aceitando no mesmo instante). A auditoria deve conferir as travas do imóvel e da proposta
 - Etapa 9:
   - (plano da Etapa 8) `desfazer_aceite()` e `cancelar_proposta()` nascem sem conferir contrato, porque a tabela ainda não existe. A Etapa 9 precisa acrescentar "só sem contrato enviado" nas duas
@@ -404,8 +404,9 @@ Lições do Captador (problemas já encontrados no projeto antigo; tratar desde 
 - Etapa 1 (PAUTA): o `npm run dev` guarda um cache em disco (`.next/dev`). Depois de mudar o `globals.css`, ele continuou servindo o CSS antigo mesmo reiniciado. Se uma mudança não aparecer no navegador: pare o `npm run dev`, apague a pasta `.next/dev` e rode de novo
 
 Atenção (algo que a próxima pessoa precisa saber):
-- **Migration nova, ainda NÃO aplicada** (`20261105230359_telefone_so_celular`, de 05/11/2026, branch `melhorias-cadastro-agenda`): troca `perfis_telefone_formato` por `perfis_telefone_celular`. Ela falha enquanto houver conta com telefone fora do padrão: em 05/11/2026 eram 2. Corrija essas contas antes do `db push` (a do admin não tem Minha conta: use o SQL Editor). Conferir com `select id from public.perfis where telefone !~ '^[1-9]{2}9[0-9]{8}$';`. Depois de aplicada, código ou teste que grave telefone fixo falha. Ensaiada com o `testar_rls.sql` numa transação desfeita: 315 de 317
-- **`testar_rls.sql` com imóvel de verdade no banco**: "Admin não envia arquivo para rascunho" e "Imóvel apagado: cada um vê só o arquivo que enviou" contam os arquivos do bucket inteiro e dão falso erro quando há fotos reais, como as de um imóvel cadastrado à mão (05/11/2026: 3 em vez de 1, nas versões com e sem a migration). Corrigir o roteiro para contar só os arquivos do próprio teste
+- **Migration nova** (`20261105230359_telefone_so_celular`, de 06/11/2026, branch `melhorias-cadastro-agenda`): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: `perfis_telefone_formato` virou `perfis_telefone_celular` (DDD + 9 + 8 dígitos); código ou teste que grave telefone fixo falha. Os 2 telefones antigos foram corrigidos antes de aplicar. `testar_rls.sql`: 317 de 317
+- **`testar_rls.sql` com imóvel de verdade no banco**: os dois testes em que o admin conta arquivos passaram a contar só os do próprio imóvel de teste (`pg_temp.arquivos_visiveis_de()`), porque contar o bucket inteiro dava falso erro com fotos reais
+- **Sem conta de admin no banco** (06/11/2026: 2 perfis, nenhum admin): para aprovar imóveis à mão, crie uma pelo `supabase/scripts/criar_admin.sql`
 - **Migration nova da Etapa 8** (`20261105180815_propostas`, de 05/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: tabela `propostas` e a coluna `imoveis.tem_proposta_aceita` **foi apagada**: "em negociação" vem de `imovel_em_negociacao()`. Depois de aplicada, código ou teste antigo que grave essa coluna falha; o `e2e/catalogo.spec.ts` da `main` falha até esta branch entrar
 - **Migration nova da auditoria da Etapa 7** (`20261105124825_auditoria_etapa_7`, de 05/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: `pedir_visita()` só aceita horário de minuto cheio e a até 15 dias (teste que chama a função precisa de horário assim; `now() + interval '2 days'` tem segundos e é recusado), e `visitas` ganhou `cancelada_em` e `cancelada_por`
 - **Migration nova da Etapa 7** (`20261104172132_visitas`, de 04/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: tabela `visitas`, em que ninguém grava direto (só pelas funções `pedir_visita`, `confirmar_visita`, `recusar_visita` e `cancelar_visita`), e `remover_corretor()` agora também cancela as visitas futuras em aberto do corretor
@@ -464,6 +465,7 @@ Toda migration nova entra aqui assim que for aplicada e o `testar_rls.sql` passa
 - `20261104172132_visitas` · 04/11/2026 · Gabriel · Etapa 7: tabela `visitas`, escrita só por `pedir_visita()`, `confirmar_visita()`, `recusar_visita()` e `cancelar_visita()`; leituras `horarios_ocupados()`, `minhas_visitas()` e `agenda_de_visitas()`; `remover_corretor()` cancela as visitas futuras em aberto
 - `20261105124825_auditoria_etapa_7` · 05/11/2026 · Gabriel · auditoria da Etapa 7: `pedir_visita()` recusa horário a mais de 15 dias ou fora do minuto cheio; `cancelada_em` e `cancelada_por` em `visitas`, preenchidas por `cancelar_visita()` e `remover_corretor()`. `testar_rls.sql`: 266 de 266 passando
 - `20261105180815_propostas` · 05/11/2026 · Gabriel · tabela `propostas`, funções de enviar, responder, desfazer e retirar, leituras do corretor e do proprietário, `imovel_em_negociacao()` e `remover_corretor()` cancelando as propostas em aberto; apaga `imoveis.tem_proposta_aceita`. `testar_rls.sql`: 315 de 315
+- `20261105230359_telefone_so_celular` · 06/11/2026 · Hevelyn · telefone só de celular: `perfis_telefone_celular` no lugar de `perfis_telefone_formato`. `testar_rls.sql`: 317 de 317
 
 ## Etapas do MVP
 
@@ -510,3 +512,4 @@ PAUTA (antes, Domora):
 - 05/11/2026 · Gabriel · Etapa 8, passo 8.2: migration `propostas` aplicada, com "em negociação" calculado das propostas aceitas e a coluna `tem_proposta_aceita` apagada. `testar_rls.sql`: 315 de 315. Falta o 8.3 (telas e status)
 - 05/11/2026 · Gabriel · Etapa 8, passo 8.3: telas de proposta do corretor e do proprietário, abas em Negociações e na página do imóvel, selo "Em negociação" e contador em Meus imóveis. Falta a auditoria (8.4) e o fechamento (8.5)
 - 05/11/2026 · Gabriel · Etapa 8: branch `etapa-8-proposta` enviada ao GitHub antes da auditoria, para a migration aplicada no banco ficar no repositório. Faltam os passos 8.4 e 8.5
+- 06/11/2026 · Hevelyn · Melhorias dos testes de uso, branch `melhorias-cadastro-agenda`: telefone só de celular na tela, no servidor e no banco (migration `telefone_so_celular`), máscara e exemplos nos campos, e calendário para escolher mês e dia na agenda do proprietário. `testar_rls.sql`: 317 de 317, com o falso erro das fotos reais corrigido

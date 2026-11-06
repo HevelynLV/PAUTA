@@ -3005,6 +3005,16 @@ as $$
   select count(*)::text from storage.objects where bucket_id = 'fotos-imoveis';
 $$;
 
+-- Só os arquivos de um imóvel. Para quem vê o bucket inteiro (o admin): contar tudo
+-- acharia também as fotos dos imóveis de verdade.
+create or replace function pg_temp.arquivos_visiveis_de(p_imovel uuid)
+returns text
+language sql
+as $$
+  select count(*)::text from storage.objects
+  where bucket_id = 'fotos-imoveis' and name like p_imovel || '/%';
+$$;
+
 do $$ declare v text; n int; i uuid; begin
   begin
     perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
@@ -3091,7 +3101,7 @@ do $$ declare v text := ''; n int; i uuid; j uuid; begin
     exception when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
     end;
     perform pg_temp.criar_arquivo(j, 'do-admin.jpg');
-    v := v || ' / ' || pg_temp.arquivos_visiveis();
+    v := v || ' / ' || pg_temp.arquivos_visiveis_de(j);
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -3272,11 +3282,11 @@ do $$ declare v text; n int; i uuid; begin
     perform pg_temp.criar_arquivo_de(i, 'do-admin.jpg', '00000000-0000-4000-a000-000000000009');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000001');
     delete from public.imoveis where id = i;
-    v := pg_temp.arquivos_visiveis();
+    v := pg_temp.arquivos_visiveis_de(i);
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000002');
-    v := v || ' / ' || pg_temp.arquivos_visiveis();
+    v := v || ' / ' || pg_temp.arquivos_visiveis_de(i);
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000009');
-    v := v || ' / ' || pg_temp.arquivos_visiveis();
+    v := v || ' / ' || pg_temp.arquivos_visiveis_de(i);
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
