@@ -6671,6 +6671,40 @@ do $$ declare v text; im uuid; p uuid; q uuid; r uuid; s uuid; n integer; begin
 end $$;
 
 -- ---------------------------------------------------------------
+-- 18. Auditoria da Etapa 8 (20261106143408_auditoria_etapa_8)
+-- ---------------------------------------------------------------
+
+do $$ declare v text; im uuid; n integer; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    n := (select versao from public.imoveis where id = im);
+    update public.imoveis set criado_em = criado_em - interval '1 day' where id = im;
+    v := ((select versao from public.imoveis where id = im) - n)::text;
+    update public.imoveis set titulo = 'Título novo' where id = im;
+    v := v || ' / ' || ((select versao from public.imoveis where id = im) - n);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Só os campos de conteúdo sobem a versão: coluna de fora da lista não sobe',
+          '0 / 1', v);
+end $$;
+
+-- O roteiro roda numa conexão só e não consegue provar a corrida com remover_corretor.
+-- Este teste só impede que a trava saia sem querer numa nova versão das funções.
+do $$ declare v text; begin
+  select string_agg(p.proname || ' ' || (pg_get_functiondef(p.oid) ~ 'removido_em is null\s+for share'), ' / ' order by p.proname)
+    into v
+  from pg_proc p
+  join pg_namespace ns on ns.oid = p.pronamespace
+  where ns.nspname = 'public' and p.proname in ('enviar_proposta', 'pedir_visita');
+  insert into resultado (teste, esperado, obtido)
+  values ('Enviar proposta e pedir visita travam o perfil, para disputar com remover_corretor',
+          'enviar_proposta true / pedir_visita true', v);
+end $$;
+
+-- ---------------------------------------------------------------
 -- Resultado
 -- ---------------------------------------------------------------
 select
