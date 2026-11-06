@@ -141,6 +141,8 @@ O admin nunca é criado pelo cadastro do app.
 
 Se algo falhar, confira primeiro o `.env.local` (passo 4) e reinicie o `npm run dev`. Se uma mudança no código ou no CSS não aparecer no navegador, pare o `npm run dev`, apague a pasta `.next/dev` (é só cache) e rode de novo.
 
+Se os testes ficarem muito lentos (computador com pouca memória), pare o `npm run dev`, rode `npm run build` e `npx next start -p 3000` e rode os testes contra esse servidor. Nesse modo, os dois testes "o app conecta ao Supabase" falham de propósito, porque `/teste-conexao` só existe em desenvolvimento.
+
 ## Fluxo de cada etapa
 
 Uma etapa por vez, sempre numa branch própria. Nunca trabalhe direto na `main`.

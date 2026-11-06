@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page, type Request } from "@playwright/test";
 
-import { diaDe, diaEMes, instanteDe, nomeDoDia, somarDias } from "../src/lib/horariosDeVisita";
+import { diaDe, diaEMes, inicioDaSemana, instanteDe, mesDe, nomeDoDia, somarDias } from "../src/lib/horariosDeVisita";
 import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura } from "./apoio/supabase";
 
 // Visitas, Etapa 7 (RF21, RF22, RNF07): o corretor agenda no calendário da página do
@@ -331,6 +331,44 @@ test("a agenda mostra a semana e filtra pelo dia", async ({ browser }) => {
     await grade.getByRole("link", { name: /Casa agenda/ }).click();
     await expect(dono.getByRole("heading", { name: `Visitas de ${nomeDoDia(dia).toLowerCase()}, ${diaEMes(dia)}` })).toBeVisible();
   }
+});
+
+// Decisão de 05/11/2026: pular para qualquer semana sem clicar semana a semana.
+test("o calendário da agenda leva a qualquer mês e dia, e marca os dias com visita", async ({ browser }) => {
+  const imovel = await criarImovel("Casa calendário");
+  await criarVisita(imovel, "beto", instanteDe(dia, "14:00"), "confirmada");
+
+  const dono = await paginaDe(browser, "dono");
+  await dono.goto("/proprietario/visitas");
+  const calendario = dono.getByRole("dialog", { name: "Escolher semana" });
+  const tituloDoMes = calendario.getByRole("button", { name: "Escolher mês e ano" });
+
+  // O dia com visita tem a marca no nome lido pelo leitor de tela.
+  await dono.getByRole("button", { name: /^Abrir calendário/ }).click();
+  await expect(calendario).toBeVisible();
+  if (mesDe(dia) !== mesDe(diaDe(new Date()))) await calendario.getByRole("button", { name: "Próximo mês" }).click();
+  await expect(calendario.getByRole("link", { name: `${nomeDoDia(dia)}, ${diaEMes(dia)}, com visita` })).toBeVisible();
+
+  // Pela lista de meses, vai para março do ano que vem.
+  const ano = Number(dia.slice(0, 4)) + 1;
+  await tituloDoMes.click();
+  await calendario.getByRole("button", { name: "Próximo ano" }).click();
+  await calendario.getByRole("button", { name: "Março", exact: true }).click();
+  await expect(tituloDoMes).toHaveText(`Março de ${ano}`);
+
+  const destino = `${ano}-03-15`;
+  await calendario.getByRole("link", { name: new RegExp(`, ${diaEMes(destino)}$`) }).click();
+  await expect(calendario).toBeHidden();
+  await expect(dono).toHaveURL(new RegExp(`semana=${inicioDaSemana(destino)}&dia=${destino}$`));
+  await expect(dono.getByRole("heading", { name: new RegExp(`Visitas de .*${diaEMes(destino)}`) })).toBeVisible();
+
+  // Reabre no mês do dia escolhido, e Esc fecha sem navegar.
+  await dono.getByRole("button", { name: /^Abrir calendário/ }).click();
+  await expect(tituloDoMes).toHaveText(`Março de ${ano}`);
+  await dono.keyboard.press("Escape");
+  await expect(calendario).toBeHidden();
+  await expect(dono).toHaveURL(new RegExp(`dia=${destino}$`));
+  expect(await dono.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(dono.viewportSize()!.width);
 });
 
 test("pedido sem resposta cujo horário passou aparece como Horário passou", async ({ browser }) => {

@@ -3,6 +3,12 @@
 
 export const icones = {
   imoveis: <path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z" />,
+  calendario: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </>
+  ),
   novo: (
     <>
       <rect x="3" y="3" width="18" height="18" rx="4" />

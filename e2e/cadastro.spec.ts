@@ -137,7 +137,30 @@ test("campos vazios ou errados mostram o erro no campo, sem criar conta", async 
 
   await expect(page.getByText("Escreva o nome (de 2 a 120 letras).")).toBeVisible();
   await expect(page.getByText("Confira o e-mail.")).toBeVisible();
-  await expect(page.getByText("Escreva o telefone com DDD, ex.: (48) 99812-4410.")).toBeVisible();
+  await expect(page.getByText("Escreva um celular com DDD, ex.: (48) 99812-4410.")).toBeVisible();
   await expect(page.getByText("A senha precisa ter pelo menos 8 caracteres.")).toBeVisible();
   await expect(page).toHaveURL(/\/cadastro$/);
+});
+
+// Decisão de 05/11/2026: só celular, porque os avisos vão por WhatsApp.
+test("o telefone mostra o modelo, formata ao digitar e só aceita celular", async ({ page }) => {
+  await page.goto("/cadastro");
+  const telefone = page.getByLabel("Telefone com DDD");
+  await expect(telefone).toHaveAttribute("placeholder", "(48) 99812-4410");
+  await expect(page.getByLabel("E-mail")).toHaveAttribute("placeholder", /@/);
+
+  await telefone.pressSequentially("48998124410999");
+  await expect(telefone).toHaveValue("(48) 99812-4410");
+
+  // Colado do WhatsApp, com o 55 do Brasil.
+  await telefone.fill("+55 48 99812-4410");
+  await expect(telefone).toHaveValue("(48) 99812-4410");
+
+  // Telefone fixo: 10 dígitos, ou 11 sem o 9 depois do DDD.
+  for (const fixo of ["(48) 3222-1234", "48 32221-2345"]) {
+    await telefone.fill(fixo);
+    await page.getByRole("button", { name: "Criar conta" }).click();
+    await expect(page.getByText("Escreva um celular com DDD, ex.: (48) 99812-4410.")).toBeVisible();
+    await expect(page).toHaveURL(/\/cadastro$/);
+  }
 });

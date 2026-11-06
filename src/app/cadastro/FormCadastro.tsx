@@ -5,6 +5,7 @@ import { startTransition, useActionState } from "react";
 
 import { Botao } from "@/components/ui/Botao";
 import { Campo } from "@/components/ui/Campo";
+import { CampoTelefone } from "@/components/ui/CampoTelefone";
 import { Cartao } from "@/components/ui/Cartao";
 import type { PerfilCadastro } from "@/lib/validacao";
 
@@ -51,6 +52,7 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
           <Campo
             name="nome_imobiliaria"
             rotulo="Nome da imobiliária"
+            placeholder="Ex.: Maré Imóveis"
             autoComplete="organization"
             defaultValue={valores.nome_imobiliaria}
             erro={erros.nome_imobiliaria}
@@ -60,6 +62,7 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
           <Campo
             name="creci"
             rotulo={perfil === "imobiliaria" ? "CRECI da imobiliária" : "Seu CRECI"}
+            placeholder={perfil === "imobiliaria" ? "12345-J" : "12345-F"}
             dica={
               perfil === "imobiliaria"
                 ? "O número com a letra J, ex.: 12345-J. Conferimos o CRECI à mão antes de ativar a assinatura."
@@ -74,6 +77,7 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
           <Campo
             name="nome"
             rotulo={perfil === "imobiliaria" ? "Nome do responsável" : "Nome completo"}
+            placeholder="Ex.: Marina Souza"
             autoComplete="name"
             defaultValue={valores.nome}
             erro={erros.nome}
@@ -82,17 +86,13 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
             name="email"
             type="email"
             rotulo="E-mail"
+            placeholder="nome@email.com"
             autoComplete="email"
             defaultValue={valores.email}
             erro={erros.email}
           />
-          <Campo
-            name="telefone"
-            type="tel"
-            rotulo="Telefone com DDD"
-            dica="Obrigatório. Os avisos chegam por WhatsApp neste número."
-            autoComplete="tel-national"
-            inputMode="tel"
+          <CampoTelefone
+            dica="Obrigatório. Use um celular: os avisos chegam por WhatsApp neste número."
             defaultValue={valores.telefone}
             erro={erros.telefone}
           />

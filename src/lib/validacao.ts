@@ -6,14 +6,34 @@ export type PerfilCadastro = "proprietario" | "imobiliaria" | "autonomo";
 
 export const PERFIS_CADASTRO: readonly PerfilCadastro[] = ["proprietario", "imobiliaria", "autonomo"];
 
-// Só números e sem o 0 da frente: "0 (48) 99812-4410" vira "48998124410".
+// Só números, sem o 0 da frente e sem o 55 do Brasil: "0 (48) 99812-4410" e
+// "+55 48 99812-4410" viram "48998124410". O 55 só sai com um número inteiro depois
+// dele, para não confundir com o DDD 55 ("55 99812-4410").
 export function limparTelefone(telefone: string) {
-  return telefone.replace(/\D/g, "").replace(/^0+/, "");
+  return telefone
+    .replace(/\D/g, "")
+    .replace(/^0+/, "")
+    .replace(/^55(?=\d{10,11}$)/, "");
 }
 
-// DDD (dois dígitos de 1 a 9) + número de 8 ou 9 dígitos (perfis_telefone_formato).
+// Celular: DDD (dois dígitos de 1 a 9), 9 e mais 8 dígitos (perfis_telefone_celular).
+// Só celular porque os avisos vão por WhatsApp (decisão de 05/11/2026).
 export function telefoneValido(telefone: string) {
-  return /^[1-9]{2}[0-9]{8,9}$/.test(telefone);
+  return /^[1-9]{2}9[0-9]{8}$/.test(telefone);
+}
+
+export const ERRO_TELEFONE = "Escreva um celular com DDD, ex.: (48) 99812-4410.";
+
+// Máscara do campo, enquanto a pessoa digita: "4899812" vira "(48) 99812". Os
+// separadores só aparecem com um dígito depois deles, para o apagar funcionar.
+export function mascararTelefone(telefone: string) {
+  const digitos = limparTelefone(telefone).slice(0, 11);
+  if (digitos.length === 0) return "";
+  const ddd = digitos.slice(0, 2);
+  const inicio = digitos.slice(2, 7);
+  const fim = digitos.slice(7);
+  if (!inicio) return `(${ddd}`;
+  return `(${ddd}) ${inicio}${fim && `-${fim}`}`;
 }
 
 // O cadastro pede só o número do CRECI; a UF é sempre SC (decisão de 22/10/2026).

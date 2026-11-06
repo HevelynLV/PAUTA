@@ -75,9 +75,34 @@ export function diaEMes(dia: string) {
   return `${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
 }
 
+// "2026-11-04" → "2026-11".
+export function mesDe(dia: string) {
+  return dia.slice(0, 7);
+}
+
+// Soma meses a um mês "AAAA-MM".
+export function somarMeses(mes: string, meses: number) {
+  const total = Number(mes.slice(0, 4)) * 12 + Number(mes.slice(5, 7)) - 1 + meses;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
+
+// Os dias que o calendário desenha para um mês: semanas inteiras, de segunda a
+// domingo, com os dias vizinhos que completam a primeira e a última semana.
+export function diasDoMes(mes: string) {
+  const inicio = inicioDaSemana(`${mes}-01`);
+  const ultimoDia = somarDias(`${somarMeses(mes, 1)}-01`, -1);
+  const fim = somarDias(inicioDaSemana(ultimoDia), 6);
+  const total = Math.round((emUtc(fim).getTime() - emUtc(inicio).getTime()) / 86_400_000) + 1;
+  return Array.from({ length: total }, (_, i) => somarDias(inicio, i));
+}
+
+export function nomeDoMes(mes: number) {
+  return NOMES_DOS_MESES[mes - 1];
+}
+
 // "Novembro de 2026", ou "Novembro e dezembro de 2026" quando o período vira o mês.
 export function tituloDoPeriodo(inicio: string, fim: string) {
-  const mes = (dia: string) => NOMES_DOS_MESES[Number(dia.slice(5, 7)) - 1];
+  const mes = (dia: string) => nomeDoMes(Number(dia.slice(5, 7)));
   const ano = (dia: string) => dia.slice(0, 4);
   if (inicio.slice(0, 7) === fim.slice(0, 7)) return `${mes(inicio)} de ${ano(inicio)}`;
   if (ano(inicio) === ano(fim)) return `${mes(inicio)} e ${mes(fim).toLowerCase()} de ${ano(fim)}`;

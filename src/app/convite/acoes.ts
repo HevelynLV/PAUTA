@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { usuarioAtual } from "@/lib/auth";
 import { CODIGO_DO_CONVITE, textoDaSituacao } from "@/lib/convite";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { emailValido, limparTelefone, nomeValido, senhaValida, telefoneValido } from "@/lib/validacao";
+import { emailValido, ERRO_TELEFONE, limparTelefone, nomeValido, senhaValida, telefoneValido } from "@/lib/validacao";
 
 // Aceitar o convite: o corretor cria a conta e já entra vinculado e ativo (RF05).
 // Exceção do exigirTipo() no CLAUDE.md: quem aceita ainda não tem conta.
@@ -38,7 +38,7 @@ export async function aceitarConvite(_anterior: EstadoConvite, formData: FormDat
   const erros: EstadoConvite["erros"] = {};
   if (!nomeValido(valores.nome)) erros.nome = "Escreva o nome (de 2 a 120 letras).";
   if (!emailValido(valores.email)) erros.email = "Confira o e-mail.";
-  if (!telefoneValido(telefone)) erros.telefone = "Escreva o telefone com DDD, ex.: (48) 99812-4410.";
+  if (!telefoneValido(telefone)) erros.telefone = ERRO_TELEFONE;
   if (!senhaValida(senha)) erros.senha = "A senha precisa ter pelo menos 8 caracteres.";
   if (Object.keys(erros).length > 0) return { erros, valores };
 

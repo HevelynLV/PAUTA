@@ -235,6 +235,8 @@ test("celular: a folha de filtros escolhe vários bairros, preço e quartos, e a
   await expect(page).toHaveURL(new RegExp(`bairro=${listas.bairros.get("Campeche")}`));
   await expect(page).toHaveURL(/quartos=2/);
   // Com 2+ quartos, o terreno (sem quartos) sai; a casa (4) e o apartamento (2) ficam.
+  // Espera os cards: a URL muda antes de a lista nova aparecer, e titulosNaTela não espera.
+  await expect(cards(page)).toHaveCount(2);
   expect(await titulosNaTela(page)).toEqual(["Casa catálogo no Campeche", "Apartamento catálogo na Lagoa"]);
   // Bairros, preço (que já vinha na URL) e quartos.
   await expect(page.getByRole("button", { name: "Filtros (3)" })).toBeVisible();
@@ -242,6 +244,7 @@ test("celular: a folha de filtros escolhe vários bairros, preço e quartos, e a
   // A mesma URL, aberta por outra pessoa (outro navegador), mostra a mesma busca.
   const compartilhada = await paginaDe(browser, "ativo");
   await compartilhada.goto(page.url());
+  await expect(cards(compartilhada)).toHaveCount(2);
   expect(await titulosNaTela(compartilhada)).toEqual(["Casa catálogo no Campeche", "Apartamento catálogo na Lagoa"]);
 
   // Limpar tira bairros, preço e quartos.

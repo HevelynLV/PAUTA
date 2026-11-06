@@ -1,7 +1,7 @@
 import "server-only";
 
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { limparTelefone, nomeValido, telefoneValido } from "@/lib/validacao";
+import { ERRO_TELEFONE, limparTelefone, nomeValido, telefoneValido } from "@/lib/validacao";
 
 // "Minha conta": nome e telefone de quem está logado. Usado pelas actions de
 // cada área, que chamam exigirTipo() antes. O banco só deixa mudar o próprio
@@ -19,7 +19,7 @@ export async function salvarDadosDaConta(usuarioId: string, formData: FormData):
 
   const erros: EstadoConta["erros"] = {};
   if (!nomeValido(nome)) erros.nome = "Escreva o nome (de 2 a 120 letras).";
-  if (!telefoneValido(telefone)) erros.telefone = "Escreva o telefone com DDD, ex.: (48) 99812-4410.";
+  if (!telefoneValido(telefone)) erros.telefone = ERRO_TELEFONE;
   if (erros.nome || erros.telefone) return { erros };
 
   const supabase = await criarClienteServidor();

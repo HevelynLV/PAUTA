@@ -47,7 +47,8 @@ Estas decisões ainda não foram tomadas. Se uma tarefa depender delas, PERGUNTE
 ## Decisões tomadas
 
 - Cadastro pelo app como proprietário, imobiliária ou corretor autônomo (o autônomo informa o próprio CRECI e assina sem imobiliária; corretor de imobiliária entra só por convite). O admin nunca é criado pelo app: cadastro normal e depois troca do tipo direto no banco. Autônomo decidido em 22/10/2026
-- Telefone com DDD é obrigatório para proprietário e assinante
+- Telefone com DDD é obrigatório para proprietário e assinante, e só celular (DDD + 9 + 8 dígitos), porque os avisos vão por WhatsApp. Na tela, no servidor e no banco. Decidido em 05/11/2026
+- Agenda do proprietário: além das setas, um calendário leva a qualquer mês e dia (até 5 anos para cada lado), com a semana e o dia na URL e um ponto nos dias com visita em aberto. Decidido em 05/11/2026
 - Imobiliária e corretor autônomo cadastrados sempre entram com assinatura `pendente`, até o admin ativar
 - Status da assinatura: `pendente`, `ativo` e `vencido` (pagamento atrasado); o bloqueio é decisão do admin e fica à parte, na coluna `bloqueado_pelo_admin`. Tem acesso quem está `ativo` e não bloqueado. Desbloquear não libera um vencido: só o pagamento libera. O corretor convidado segue a assinatura da imobiliária: bloqueada ou vencida, os corretores dela perdem o acesso na hora. Decidido em 22/10/2026; bloqueio separado do status desde a auditoria da Etapa 2
 - Ações do admin que mexem no Supabase Auth (excluir imobiliária ou autônomo pendente com o usuário) usam `src/lib/supabase/admin.ts`, com `server-only` e uma chave secreta de produção separada das chaves pessoais de teste. Só depois de `exigirTipo("admin")`. Decidido em 22/10/2026; o convite deixou de usar a chave em 28/10/2026
