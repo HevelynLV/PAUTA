@@ -1,6 +1,6 @@
 # PAUTA — Roadmap de prompts
 
-Última revisão: 26/10/2026
+Última revisão: 06/11/2026
 
 Os prompts para construir o MVP do PAUTA com o Claude Code, da Etapa 0 à Etapa 13. Siga na ordem, de cima para baixo: cada etapa usa as anteriores, e dentro de cada etapa os prompts já estão na sequência certa, do primeiro (abrir a etapa) ao último (fechar e enviar). As etapas e os critérios de "pronto" são os do [ROADMAP.md](../ROADMAP.md); as regras do produto são as da [docs/visao-geral.md](visao-geral.md).
 
@@ -34,7 +34,8 @@ Me dê 2 ou 3 opções, com o impacto de cada uma no código, no custo e no pilo
 | ~~Como aplicar as migrations~~: decidido em 20/10/2026, `supabase db push` | 1 |
 | Texto do termo de exclusividade: a Etapa 4 usa um texto provisório (decidido em 26/10/2026); o final entra antes do piloto | 13 |
 | ~~Filtros do catálogo~~: decidido em 03/11/2026, tipo, bairro (vários), preço, quartos e status | 6 |
-| % da comissão do PAUTA | 9 |
+| ~~Cláusula da comissão e limite do PDF~~: decididos em 06/11/2026 (obrigatória; 20 MB) | 9 |
+| % da comissão do PAUTA: não trava a Etapa 9 (o admin registra o valor em R$ do contrato; decidido em 06/11/2026) | 13 |
 | Provedor do WhatsApp e custo por mensagem | 10 |
 | Preço da mensalidade | 11 |
 | Antecedência do aviso e prazo da renovação | 12 |
@@ -525,7 +526,7 @@ Depois confira o "Pronto quando" da Etapa 8, item por item. Se estiver tudo cert
 
 **Pronto quando:** aprovar o contrato marca o imóvel como vendido e recusa as outras propostas numa operação só; recusar devolve com motivo.
 **Telas do protótipo:** CorContrato, AdmContratos, AdmVendido, AdmPainel (comissões), SiteCorNegociacoes, SiteAdmContratos e SiteAdmVendido.
-**Decidir antes:** % da comissão do PAUTA.
+**Decidir antes:** nada: o admin registra o valor em R$ que está no contrato. A % do PAUTA fica para antes do piloto (decidido em 06/11/2026).
 
 **9.1 Abrir a etapa** *(`/clear` + modo de planejamento)*
 
