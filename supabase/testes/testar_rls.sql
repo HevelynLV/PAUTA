@@ -469,6 +469,43 @@ do $$ declare v text; begin
   values ('Usuário não troca o telefone por um inválido', 'bloqueado (23514)', v);
 end $$;
 
+-- Só celular (migration 20261105230359_telefone_so_celular): DDD + 9 + 8 dígitos.
+do $$ declare v text; w text; begin
+  begin
+    perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
+    perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000001');
+    begin
+      update public.perfis set telefone = '4832221234' where id = '00000000-0000-4000-a000-000000000001';
+      v := 'permitido';
+    exception when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    begin
+      update public.perfis set telefone = '48832212345' where id = '00000000-0000-4000-a000-000000000001';
+      w := 'permitido';
+    exception when others then w := pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Telefone fixo, com 10 ou 11 dígitos, é barrado', 'bloqueado (23514) / bloqueado (23514)', v || ' / ' || w);
+end $$;
+
+do $$ declare v text; begin
+  begin
+    begin
+      perform pg_temp.criar_conta('00000000-0000-4000-a000-000000000001',
+        '{"tipo":"proprietario","nome":"Com Fixo","telefone":"(48) 3222-1234"}');
+      v := 'permitido';
+    exception when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+    end;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cadastro com telefone fixo é barrado', 'bloqueado (23514)', v);
+end $$;
+
 -- Criar e apagar ----------------------------------------------------
 
 do $$ declare v text; begin

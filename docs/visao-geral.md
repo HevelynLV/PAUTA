@@ -68,7 +68,7 @@ O que o app faz. Todos os 32 estão a construir no repositório novo (RF01 a RF0
 
 | ID | Módulo | Requisito | Situação |
 | --- | --- | --- | --- |
-| RF01 | Contas | Cadastro como proprietário, imobiliária ou corretor autônomo, com e-mail, senha, nome e telefone com DDD | A construir |
+| RF01 | Contas | Cadastro como proprietário, imobiliária ou corretor autônomo, com e-mail, senha, nome e celular com DDD | A construir |
 | RF02 | Contas | Imobiliária informa nome e CRECI (o corretor autônomo, o próprio CRECI); o CRECI não pode repetir; entra com assinatura pendente | A construir |
 | RF03 | Contas | Login, logout e recuperação de senha por e-mail | A construir |
 | RF04 | Contas | Cada tipo de usuário só abre a própria área, nem digitando o endereço | A construir |
@@ -148,6 +148,12 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 05/11/2026 (testes de uso)
+
+- Telefone só de celular: DDD + 9 + 8 dígitos, na tela, no servidor e no banco, porque os avisos vão por WhatsApp. Telefone fixo é recusado. O sistema confere o formato, não se o DDD existe.
+- Os campos de telefone formatam enquanto a pessoa digita e aceitam o número colado com 0 ou +55. As telas de criar conta e de convite mostram um exemplo dentro dos campos.
+- Agenda do proprietário: além das setas, um calendário leva a qualquer mês e dia, até 5 anos para cada lado, e marca com um ponto os dias com visita em aberto.
 
 ## Decisões tomadas em 05/11/2026 (plano da Etapa 8)
 

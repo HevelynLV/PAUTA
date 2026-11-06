@@ -4,6 +4,7 @@ import { startTransition, useActionState } from "react";
 
 import { Botao } from "@/components/ui/Botao";
 import { Campo } from "@/components/ui/Campo";
+import { CampoTelefone } from "@/components/ui/CampoTelefone";
 
 import { aceitarConvite, type EstadoConvite } from "../acoes";
 
@@ -32,11 +33,19 @@ export function FormAceitarConvite({ codigo, emailDoConvite }: { codigo: string;
       <input type="hidden" name="codigo" value={codigo} />
 
       <div className="flex flex-col gap-3.5 px-5 md:px-0">
-        <Campo name="nome" rotulo="Nome completo" autoComplete="name" defaultValue={valores.nome} erro={erros.nome} />
+        <Campo
+          name="nome"
+          rotulo="Nome completo"
+          placeholder="Ex.: Marina Souza"
+          autoComplete="name"
+          defaultValue={valores.nome}
+          erro={erros.nome}
+        />
         <Campo
           name="email"
           type="email"
           rotulo="E-mail"
+          placeholder="nome@email.com"
           autoComplete="email"
           dica={
             emailDoConvite
@@ -48,13 +57,8 @@ export function FormAceitarConvite({ codigo, emailDoConvite }: { codigo: string;
           erro={erros.email}
         />
         <div className="grid gap-3.5 md:grid-cols-2 md:gap-4">
-          <Campo
-            name="telefone"
-            type="tel"
-            rotulo="Telefone com DDD"
-            dica="Os avisos chegam por WhatsApp neste número."
-            autoComplete="tel-national"
-            inputMode="tel"
+          <CampoTelefone
+            dica="Use um celular: os avisos chegam por WhatsApp neste número."
             defaultValue={valores.telefone}
             erro={erros.telefone}
           />

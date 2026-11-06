@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { Cartao } from "@/components/ui/Cartao";
 import { AbasDoProprietario } from "@/components/visita/AbasDoProprietario";
+import { CalendarioDaAgenda } from "@/components/visita/CalendarioDaAgenda";
 import { ListaDeVisitas } from "@/components/visita/CartaoDeVisita";
 import { exigirTipo } from "@/lib/auth";
 import {
@@ -66,9 +67,12 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
       <AbasDoProprietario aba="visitas" paraConfirmar={paraConfirmar} />
 
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-t2 font-bold tracking-[-0.01em]">
-          {diaEMes(dias[0])} a {diaEMes(dias[6])}
-        </h2>
+        <CalendarioDaAgenda
+          hoje={hoje}
+          semana={semana}
+          escolhido={diaEscolhido}
+          diasComVisita={[...new Set([...abertas, ...daSemana].map((visita) => diaDe(visita.horario)))]}
+        />
         <nav aria-label="Semana" className="flex items-center gap-1 text-small font-bold">
           <Link href={url(somarDias(semana, -7))} aria-label="Semana anterior" className="flex size-11 items-center justify-center text-mar no-underline">
             ‹
@@ -83,7 +87,7 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
       </div>
 
       <FaixaDeDias dias={dias} hoje={hoje} escolhido={diaEscolhido} visitas={daSemana} url={(dia) => url(semana, dia)} />
-      <GradeDaSemana dias={dias} hoje={hoje} visitas={daSemana} url={(dia) => url(semana, dia)} />
+      <GradeDaSemana dias={dias} hoje={hoje} escolhido={diaEscolhido} visitas={daSemana} url={(dia) => url(semana, dia)} />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -156,11 +160,13 @@ function FaixaDeDias({
 function GradeDaSemana({
   dias,
   hoje,
+  escolhido,
   visitas,
   url,
 }: {
   dias: string[];
   hoje: string;
+  escolhido: string | null;
   visitas: VisitaDaAgenda[];
   url: (dia: string) => string;
 }) {
@@ -174,7 +180,10 @@ function GradeDaSemana({
             <span
               key={dia}
               role="columnheader"
-              className={`border-b border-l border-line py-2 text-center text-tiny ${dia === hoje ? "font-bold text-mar" : "text-ink2"}`}
+              aria-current={dia === escolhido ? "date" : undefined}
+              className={`border-b border-l border-line py-2 text-center text-tiny ${dia === hoje ? "font-bold text-mar" : "text-ink2"} ${
+                dia === escolhido ? "bg-mar-soft" : ""
+              }`}
             >
               {nomeDoDia(dia)} {Number(dia.slice(8, 10))}
             </span>

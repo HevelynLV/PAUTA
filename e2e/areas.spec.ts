@@ -95,13 +95,13 @@ test("Minha conta salva nome e telefone, e o e-mail não muda pela tela", async 
 
   await pagina.getByLabel("Telefone com DDD").fill("x");
   await pagina.getByRole("button", { name: "Salvar dados" }).click();
-  await expect(pagina.getByText("Escreva o telefone com DDD, ex.: (48) 99812-4410.")).toBeVisible();
+  await expect(pagina.getByText("Escreva um celular com DDD, ex.: (48) 99812-4410.")).toBeVisible();
 
   await pagina.getByLabel("Nome completo").fill("Marina Areas Nova");
-  await pagina.getByLabel("Telefone com DDD").fill("0 (48) 3222-1234");
+  await pagina.getByLabel("Telefone com DDD").fill("0 (48) 99123-4567");
   await pagina.getByRole("button", { name: "Salvar dados" }).click();
   await expect(pagina.getByText("Dados salvos.")).toBeVisible();
-  expect(await perfilPorEmail(email("prop"))).toMatchObject({ nome: "Marina Areas Nova", telefone: "4832221234" });
+  expect(await perfilPorEmail(email("prop"))).toMatchObject({ nome: "Marina Areas Nova", telefone: "48991234567" });
 
   // Volta como estava, para os outros testes.
   await mudarNome("prop", "Marina Areas", "48999990000");

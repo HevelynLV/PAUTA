@@ -7,6 +7,7 @@ import {
   creciValido,
   emailValido,
   erroDoCreci,
+  ERRO_TELEFONE,
   limparCreci,
   limparTelefone,
   nomeValido,
@@ -60,7 +61,7 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
   const erros: EstadoCadastro["erros"] = {};
   if (!nomeValido(valores.nome)) erros.nome = "Escreva o nome (de 2 a 120 letras).";
   if (!emailValido(valores.email)) erros.email = "Confira o e-mail.";
-  if (!telefoneValido(telefone)) erros.telefone = "Escreva o telefone com DDD, ex.: (48) 99812-4410.";
+  if (!telefoneValido(telefone)) erros.telefone = ERRO_TELEFONE;
   if (!senhaValida(senha)) erros.senha = "A senha precisa ter pelo menos 8 caracteres.";
   if (perfil === "imobiliaria" && !nomeValido(valores.nome_imobiliaria)) {
     erros.nome_imobiliaria = "Escreva o nome da imobiliária.";

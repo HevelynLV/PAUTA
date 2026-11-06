@@ -2,8 +2,15 @@
 
 ## Onde paramos
 
-Última atualização: 05/11/2026 · por Gabriel
-Etapa atual: 8. Proposta, na branch `etapa-8-proposta` (criada da `main` depois do merge do Pull Request #8, Etapa 7). Passos 8.1 a 8.3 feitos e branch enviada ao GitHub. Próximo: numa sessão nova (`/clear`), nesta mesma branch, rodar `/auditar-etapa 8` (passo 8.4), que inclui uma rodada completa do `npm run test:e2e`. Só depois do 8.5 a etapa fica concluída e o Pull Request pode entrar na `main`
+Última atualização: 05/11/2026 · por Hevelyn
+Etapa atual: 8. Proposta. Passos 8.1 a 8.3 feitos, e o Pull Request #9 já entrou na `main`. Próximo: numa sessão nova (`/clear`), rodar `/auditar-etapa 8` (passo 8.4), que inclui uma rodada completa do `npm run test:e2e`, e depois fechar no 8.5. O `etapa-8-proposta` foi para a `main` antes desses dois passos: as correções do 8.5 precisam de uma branch nova
+
+Melhorias dos testes de uso (05/11/2026, Hevelyn), na branch `melhorias-cadastro-agenda`:
+- Telefone só de celular (DDD + 9 + 8 dígitos), na tela, no servidor e no banco; `CampoTelefone` com máscara, aceitando 0 e +55 colados, em cadastro, convite e Minha conta. Exemplos dentro dos campos nas telas de criar conta e de convite
+- Agenda do proprietário: o título da semana abre o `CalendarioDaAgenda`, com mês, lista dos 12 meses e ano, até 5 anos para cada lado, e ponto nos dias com visita em aberto
+- Testes contra o build de produção (`npx next start -p 3000`, configuração `pauta-producao` no `.claude/launch.json`), sem a migration aplicada: computador 124 passando, 7 pulados e 1 falha esperada (`/teste-conexao` dá 404 em produção); celular 129 passando, 1 pulado, a mesma falha esperada e 1 falha de `catalogo.spec.ts`, que lia a lista antes de ela aparecer. Corrigido o teste, ele passou 6 de 6 sozinho; não houve outra rodada completa. Lint e build passam
+- Lição: com pouca memória (448 MB livres de 7,8 GB), o `npm run dev` parou 24 e 29 minutos compactando o cache, e a bateria levou 1h18 só no celular. Contra o build de produção, cada tamanho leva cerca de 7 minutos
+- Falta aplicar a migration `20261105230359_telefone_so_celular` (ver "Atenção")
 
 Etapa 8, em resumo: o corretor envia a proposta pela página do imóvel, com valor, forma de pagamento, condições e, se quiser, o nome do comprador. O proprietário vê os dados do corretor e aceita, recusa ou desfaz o aceite, e pode ter várias aceitas ao mesmo tempo. Com pelo menos uma aceita, o imóvel aparece como "Em negociação" no catálogo. Depois de recusada ou retirada, o corretor pode mandar outra. O envio do contrato entra na Etapa 9
 
@@ -397,6 +404,8 @@ Lições do Captador (problemas já encontrados no projeto antigo; tratar desde 
 - Etapa 1 (PAUTA): o `npm run dev` guarda um cache em disco (`.next/dev`). Depois de mudar o `globals.css`, ele continuou servindo o CSS antigo mesmo reiniciado. Se uma mudança não aparecer no navegador: pare o `npm run dev`, apague a pasta `.next/dev` e rode de novo
 
 Atenção (algo que a próxima pessoa precisa saber):
+- **Migration nova, ainda NÃO aplicada** (`20261105230359_telefone_so_celular`, de 05/11/2026, branch `melhorias-cadastro-agenda`): troca `perfis_telefone_formato` por `perfis_telefone_celular`. Ela falha enquanto houver conta com telefone fora do padrão: em 05/11/2026 eram 2. Corrija essas contas antes do `db push` (a do admin não tem Minha conta: use o SQL Editor). Conferir com `select id from public.perfis where telefone !~ '^[1-9]{2}9[0-9]{8}$';`. Depois de aplicada, código ou teste que grave telefone fixo falha. Ensaiada com o `testar_rls.sql` numa transação desfeita: 315 de 317
+- **`testar_rls.sql` com imóvel de verdade no banco**: "Admin não envia arquivo para rascunho" e "Imóvel apagado: cada um vê só o arquivo que enviou" contam os arquivos do bucket inteiro e dão falso erro quando há fotos reais, como as de um imóvel cadastrado à mão (05/11/2026: 3 em vez de 1, nas versões com e sem a migration). Corrigir o roteiro para contar só os arquivos do próprio teste
 - **Migration nova da Etapa 8** (`20261105180815_propostas`, de 05/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: tabela `propostas` e a coluna `imoveis.tem_proposta_aceita` **foi apagada**: "em negociação" vem de `imovel_em_negociacao()`. Depois de aplicada, código ou teste antigo que grave essa coluna falha; o `e2e/catalogo.spec.ts` da `main` falha até esta branch entrar
 - **Migration nova da auditoria da Etapa 7** (`20261105124825_auditoria_etapa_7`, de 05/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: `pedir_visita()` só aceita horário de minuto cheio e a até 15 dias (teste que chama a função precisa de horário assim; `now() + interval '2 days'` tem segundos e é recusado), e `visitas` ganhou `cancelada_em` e `cancelada_por`
 - **Migration nova da Etapa 7** (`20261104172132_visitas`, de 04/11/2026): já aplicada no Supabase compartilhado. Depois do `git pull`, confira com `npx supabase migration list`. Mudou: tabela `visitas`, em que ninguém grava direto (só pelas funções `pedir_visita`, `confirmar_visita`, `recusar_visita` e `cancelar_visita`), e `remover_corretor()` agora também cancela as visitas futuras em aberto do corretor

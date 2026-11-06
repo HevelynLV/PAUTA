@@ -4,6 +4,7 @@ import { startTransition, useActionState } from "react";
 
 import { Botao } from "@/components/ui/Botao";
 import { Campo } from "@/components/ui/Campo";
+import { CampoTelefone } from "@/components/ui/CampoTelefone";
 import type { EstadoConta } from "@/lib/conta";
 
 // Formulário de "Minha conta" (ProConta.dc.html). A action vem da página de cada
@@ -43,13 +44,8 @@ export function FormConta({
         dica="Para trocar o e-mail, fale com a equipe PAUTA."
         className="[&_input]:bg-bg [&_input]:text-ink2"
       />
-      <Campo
-        name="telefone"
-        type="tel"
-        rotulo="Telefone com DDD"
-        dica="Os avisos chegam por WhatsApp neste número."
-        autoComplete="tel-national"
-        inputMode="tel"
+      <CampoTelefone
+        dica="Use um celular: os avisos chegam por WhatsApp neste número."
         defaultValue={telefone}
         erro={estado.erros?.telefone}
       />
