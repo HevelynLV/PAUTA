@@ -3,7 +3,7 @@
 ## Onde paramos
 
 Última atualização: 06/11/2026 · por Hevelyn
-Etapa atual: 9. Contrato e venda, 9.1 a 9.4c feitos, na branch `etapa-9-contrato` (commits locais, ainda sem push). Próximo: passo 9.4d (`e2e/contratos.spec.ts` com o fluxo inteiro, do cadastro do imóvel ao vendido, e `e2e/contratos-simultaneos.spec.ts` com dois contratos do mesmo imóvel aprovados ao mesmo tempo), depois a bateria e2e completa.
+Etapa atual: 9. Contrato e venda, 9.1 a 9.4d feitos, na branch `etapa-9-contrato` (commits locais, ainda sem push). Próximo: passo 9.5, `/auditar-etapa 9` numa sessão nova (`/clear`); depois 9.6 (corrigir, `testar_rls.sql`, `/atualizar-roadmap`, push e Pull Request).
 
 Etapa 9:
 - 9.1 feito (06/11/2026, Hevelyn): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 06/11/2026 (plano da Etapa 9)") e no CLAUDE.md. A % da comissão segue em aberto, mas não trava a etapa: o admin registra o valor em R$ do contrato. A cláusula da comissão é condição para aprovar, o PDF tem até 20 MB, e só o contrato em análise impede desfazer o aceite e retirar a proposta
@@ -42,6 +42,10 @@ Etapa 9:
   - Aba Propostas: a proposta com contrato mostra o que aconteceu (em análise, aprovado ou devolvido) e "Ver contrato". Com o contrato em análise, "Desfazer aceite" some
   - O dono nunca vê a comissão: só o valor final e a data, que vêm de `resumo_de_propostas()`
   - `e2e/contratos-proprietario.spec.ts`: 6 de 6 (3 em cada tamanho de tela). Também passaram `propostas` e `imovel-lista` (37 passando, 1 pulado). Lint e build passam
+- 9.4d feito (09/11/2026, Hevelyn), sem migration e sem mudança no app:
+  - `e2e/contratos.spec.ts`: o fluxo inteiro pela tela, nos dois tamanhos: duas propostas aceitas, contrato enviado, devolvido com motivo, reenviado e aprovado; o imóvel sai do catálogo, a outra proposta é recusada e a dona vê "Vendida por"
+  - `e2e/contratos-simultaneos.spec.ts` (só celular, pela API, 3 rodadas cada): dois contratos do mesmo imóvel aprovados juntos, o mesmo contrato aprovado duas vezes, aprovar e recusar juntos, o dono aceitando outra proposta e outro corretor registrando contrato durante a aprovação. Sempre uma venda só e nenhum contrato preso em análise
+  - Bateria completa contra o build de produção: 310 passando, 28 pulados e só as 2 falhas esperadas de `/teste-conexao`, em 40 minutos. Nenhuma conta `@exemplo.com` sobrando
 
 Melhorias dos testes de uso (05 e 06/11/2026, Hevelyn), na branch `melhorias-cadastro-agenda`:
 - Telefone só de celular (DDD + 9 + 8 dígitos), na tela, no servidor e no banco; `CampoTelefone` com máscara, aceitando 0 e +55 colados, em cadastro, convite e Minha conta. Exemplos dentro dos campos nas telas de criar conta e de convite
@@ -571,3 +575,4 @@ PAUTA (antes, Domora):
 - 06/11/2026 · Hevelyn · Etapa 9, passo 9.3b: janela de envio do contrato e acompanhamento em Negociações (em análise, recusado com motivo, reenvio, ver PDF). Corrigida a conferência dos bytes, que prendia o envio. 16 testes novos pela tela.
 - 09/11/2026 · Hevelyn · Etapa 9, passos 9.4a e 9.4b: conferência do contrato pelo admin (três itens, aprovar com valor final e comissão, recusar com motivo, pré-visualização do PDF no computador), tela Venda registrada e comissões do PAUTA no painel. 12 testes novos.
 - 09/11/2026 · Hevelyn · Etapa 9, passo 9.4c: o proprietário vê o contrato em análise, o devolvido e a venda (valor final e data, sem a comissão), abre o PDF e não desfaz o aceite com o contrato em análise. 6 testes novos.
+- 09/11/2026 · Hevelyn · Etapa 9, passo 9.4d: teste do fluxo inteiro do contrato pela tela e 5 testes de operações simultâneas pela API; bateria completa com 310 passando.
