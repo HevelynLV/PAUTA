@@ -2,8 +2,9 @@
 
 ## Onde paramos
 
-Última atualização: 06/11/2026 · por Hevelyn
-Etapa atual: 9. Contrato e venda, 9.1 a 9.5 feitos e as correções do 9.6 aplicadas, na branch `etapa-9-contrato` (commits locais, ainda sem push). Próximo: fechar o 9.6: conferir o "Pronto quando", rodar `/atualizar-roadmap`, push e Pull Request.
+Última atualização: 09/11/2026 · por Hevelyn
+Etapa atual: 9. Contrato e venda, **fechada** (09/11/2026), na branch `etapa-9-contrato`. Falta o push e o Pull Request para a `main`.
+Próximo: depois do merge, a Etapa 10 (avisos), que começa pelo prompt 10.1 do `docs/prompts.md` numa sessão nova, na branch `etapa-10-avisos` criada da `main` atualizada. Antes, decidir com o Gabriel o provedor da API oficial do WhatsApp e o custo por mensagem (trava a Etapa 10; ver "Pendências"). A Etapa 11 também está travada pelo preço da mensalidade.
 
 Etapa 9:
 - 9.1 feito (06/11/2026, Hevelyn): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 06/11/2026 (plano da Etapa 9)") e no CLAUDE.md. A % da comissão segue em aberto, mas não trava a etapa: o admin registra o valor em R$ do contrato. A cláusula da comissão é condição para aprovar, o PDF tem até 20 MB, e só o contrato em análise impede desfazer o aceite e retirar a proposta
@@ -47,6 +48,9 @@ Etapa 9:
   - `e2e/contratos-simultaneos.spec.ts` (só celular, pela API, 3 rodadas cada): dois contratos do mesmo imóvel aprovados juntos, o mesmo contrato aprovado duas vezes, aprovar e recusar juntos, o dono aceitando outra proposta e outro corretor registrando contrato durante a aprovação. Sempre uma venda só e nenhum contrato preso em análise
   - Bateria completa contra o build de produção: 310 passando, 28 pulados e só as 2 falhas esperadas de `/teste-conexao`, em 40 minutos. Nenhuma conta `@exemplo.com` sobrando
 - 9.5 feito (09/11/2026, Hevelyn): auditoria numa sessão nova. Nada crítico, 3 itens importantes e 7 melhorias
+- 9.6 fechado (09/11/2026, Hevelyn). "Pronto quando" conferido:
+  - Aprovar marca vendido e recusa as outras numa operação só: tudo acontece dentro de `aprovar_contrato()`, uma função do banco. Testes `contratos.spec.ts` (fluxo inteiro pela tela, nos dois tamanhos), `contratos-conferencia.spec.ts` ("o admin confere, ajusta o valor final e registra a venda numa operação só") e os 5 de `contratos-simultaneos.spec.ts` (sempre uma venda só): passaram depois das correções
+  - Recusar devolve com motivo: o motivo é obrigatório no banco e na action; o corretor vê o motivo e reenvia (`contratos-envio.spec.ts`, "contrato recusado mostra o motivo, deixa retirar e pode ser reenviado") e o imóvel segue em negociação (`contratos.spec.ts`): passaram
 - 9.6, correções (09/11/2026, Hevelyn):
   - Migration `20261109181706_auditoria_etapa_9` aplicada (ver "Atenção"). Só PDF vira contrato, também pela API: `enviar_contrato()` ganhou `p_assinatura` e só registra com a assinatura (HMAC-SHA256) que o servidor dá depois de ler o começo do arquivo; ela cobre proposta, caminho, corretor e o eTag do arquivo. Segredo no Vault (`pauta_contrato_pdf`) e em `CONTRATO_PDF_SEGREDO`; a versão sem assinatura saiu do banco. `pode_enviar_contrato()` aceita no máximo 3 arquivos sem registro por proposta. `minhas_propostas()` e `propostas_recebidas()` ignoram o contrato recusado enviado antes do aceite atual
   - App: `src/lib/assinaturaDoContrato.ts` (`server-only`); a action apaga o arquivo que não conseguiu ler e, se a resposta do banco se perde, confere se o contrato ficou registrado; os três itens da conferência vão separados para o servidor; o vendido não mostra mais "1 proposta" em Meus imóveis
@@ -543,7 +547,7 @@ Toda migration nova entra aqui assim que for aplicada e o `testar_rls.sql` passa
 - [x] 6. Catálogo — Pronto quando: assinante ativo filtra pelo celular e vê "disponível" ou "em negociação"; bloqueado não vê nada; vendido não aparece
 - [x] 7. Visita — Pronto quando: o corretor pede visita, o proprietário confirma ou recusa e o corretor vê a resposta
 - [x] 8. Proposta — Pronto quando: duas propostas aceitas no mesmo imóvel deixam ele "em negociação"
-- [ ] 9. Contrato e venda — Pronto quando: aprovar o contrato marca o imóvel como vendido e recusa as outras propostas numa operação só; recusar devolve com motivo
+- [x] 9. Contrato e venda — Pronto quando: aprovar o contrato marca o imóvel como vendido e recusa as outras propostas numa operação só; recusar devolve com motivo
 - [ ] 10. Avisos — Pronto quando: cada evento do fluxo gera aviso na lista do app e no WhatsApp
 - [ ] 11. Cobrança — Pronto quando: assinante com pagamento vencido no Asaas perde o acesso sozinho
 - [ ] 12. Exclusividade — Pronto quando: sem renovação, o imóvel sai do catálogo sozinho no vencimento
@@ -587,3 +591,4 @@ PAUTA (antes, Domora):
 - 09/11/2026 · Hevelyn · Etapa 9, passo 9.4c: o proprietário vê o contrato em análise, o devolvido e a venda (valor final e data, sem a comissão), abre o PDF e não desfaz o aceite com o contrato em análise. 6 testes novos.
 - 09/11/2026 · Hevelyn · Etapa 9, passo 9.4d: teste do fluxo inteiro do contrato pela tela e 5 testes de operações simultâneas pela API; bateria completa com 310 passando.
 - 09/11/2026 · Hevelyn · Etapa 9, passos 9.5 e 9.6: auditoria (nada crítico) e correções: contrato só em PDF também pela API (assinatura do servidor), limite de 3 arquivos sem registro, motivo antigo escondido, contador do vendido, três itens separados e resposta perdida tratada. Migration `20261109181706_auditoria_etapa_9`
+- 09/11/2026 · Hevelyn · Etapa 9 fechada: auditoria feita, "Pronto quando" conferido e ROADMAP atualizado para o push
