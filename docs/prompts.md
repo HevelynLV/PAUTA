@@ -36,7 +36,8 @@ Me dê 2 ou 3 opções, com o impacto de cada uma no código, no custo e no pilo
 | ~~Filtros do catálogo~~: decidido em 03/11/2026, tipo, bairro (vários), preço, quartos e status | 6 |
 | ~~Cláusula da comissão e limite do PDF~~: decididos em 06/11/2026 (obrigatória; 20 MB) | 9 |
 | % da comissão do PAUTA: não trava a Etapa 9 (o admin registra o valor em R$ do contrato; decidido em 06/11/2026) | 13 |
-| Provedor do WhatsApp e custo por mensagem | 10 |
+| ~~Provedor do WhatsApp~~: decidido em 09/11/2026, Meta direto (Cloud API), com o número de teste gratuito até o piloto | 10 |
+| Custo por mensagem do WhatsApp no piloto | 13 |
 | Preço da mensalidade | 11 |
 | Antecedência do aviso e prazo da renovação | 12 |
 | Termo de assinatura das imobiliárias e corretores (o aceite entra no 13.4) | 13 |
@@ -577,12 +578,12 @@ Depois confira o "Pronto quando" da Etapa 9, item por item. Se estiver tudo cert
 
 **Pronto quando:** cada evento do fluxo gera aviso na lista do app e no WhatsApp.
 **Telas do protótipo:** CorAvisos, ProAvisos, SiteCorAvisos e SiteProAvisos.
-**Decidir antes:** provedor do WhatsApp.
+**Decidir antes:** nada: o provedor é a Meta direto (Cloud API), com o número de teste gratuito até o piloto (decidido em 09/11/2026).
 
 **10.1 Abrir a etapa** *(`/clear` + modo de planejamento)*
 
 ```text
-Vamos começar a Etapa 10 (avisos) do PAUTA. Leia "Onde paramos" e "Atenção" no ROADMAP.md e o requisito RF29 na docs/visao-geral.md. O provedor do WhatsApp decidido é <provedor>. Confira se estou na branch etapa-10-avisos.
+Vamos começar a Etapa 10 (avisos) do PAUTA. Leia "Onde paramos" e "Atenção" no ROADMAP.md e o requisito RF29 na docs/visao-geral.md. O provedor do WhatsApp decidido é a Meta direto (WhatsApp Cloud API), só com o número de teste gratuito até o piloto. Confira se estou na branch etapa-10-avisos.
 As telas desta etapa no protótipo (docs/prototipo/) são: CorAvisos, ProAvisos, SiteCorAvisos e SiteProAvisos. Construa seguindo o layout delas, com os componentes do passo 1.6; se o protótipo e a Visão geral divergirem, me pergunte.
 Me entregue o plano em passos pequenos, a tabela de avisos com as políticas de RLS, os riscos e as suas perguntas. Liste todos os eventos que já existem no código e que precisam gerar aviso. Não escreva código ainda.
 ```

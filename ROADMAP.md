@@ -4,7 +4,7 @@
 
 Última atualização: 09/11/2026 · por Hevelyn
 Etapa atual: 9. Contrato e venda, **fechada** (09/11/2026), na branch `etapa-9-contrato`. Falta o push e o Pull Request para a `main`.
-Próximo: depois do merge, a Etapa 10 (avisos), que começa pelo prompt 10.1 do `docs/prompts.md` numa sessão nova, na branch `etapa-10-avisos` criada da `main` atualizada. Antes, decidir com o Gabriel o provedor da API oficial do WhatsApp e o custo por mensagem (trava a Etapa 10; ver "Pendências"). A Etapa 11 também está travada pelo preço da mensalidade.
+Próximo: depois do merge, a Etapa 10 (avisos), que começa pelo prompt 10.1 do `docs/prompts.md` numa sessão nova, na branch `etapa-10-avisos` criada da `main` atualizada. O provedor do WhatsApp foi decidido em 09/11/2026: Meta direto (Cloud API), só com o número de teste gratuito até o piloto. A Etapa 11 segue travada pelo preço da mensalidade.
 
 Etapa 9:
 - 9.1 feito (06/11/2026, Hevelyn): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 06/11/2026 (plano da Etapa 9)") e no CLAUDE.md. A % da comissão segue em aberto, mas não trava a etapa: o admin registra o valor em R$ do contrato. A cláusula da comissão é condição para aprovar, o PDF tem até 20 MB, e só o contrato em análise impede desfazer o aceite e retirar a proposta
@@ -393,7 +393,7 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - (auditoria da Etapa 8) `enviar_proposta()` não tem limite de frequência: retirar e enviar sem parar gera linhas sem fim e empurra propostas antigas para fora do `limit 500` de `propostas_recebidas()`. Tratar junto com o limite de pedidos de visita
   - (plano da Etapa 8) A proposta pode ser reenviada sem limite depois de recusada ou retirada: rever o excesso de avisos e o custo no WhatsApp
   - (auditoria da Etapa 7) A lista de eventos do prompt 10.2 não cita o cancelamento de visita nem a recusa em massa ao confirmar um horário. `cancelada_por` diz quem cancelou: o aviso vai para o outro lado
-  - Provedor da API oficial do WhatsApp (Meta direto ou um intermediário como Twilio ou Z-API) e o custo por mensagem
+  - Primeiro passo da Etapa 10: conferir se a conta de teste da Meta aprova modelos próprios (ex.: "Seu pedido de visita foi confirmado"). Se só mandar o `hello_world`, o teste mostra que a mensagem chega, sem o texto final
   - Os avisos "imóvel novo no catálogo" (para todos os assinantes) e "mensalidade paga", que aparecem no protótipo, entram no RF29? O primeiro pode custar caro no WhatsApp
   - O admin tem lista de avisos? O RF30 diz que ele recebe o aviso de vencimento, mas no protótipo ele só vê isso no painel
 - Etapa 11:
@@ -407,6 +407,7 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - **(banco)** O que acontece com as propostas aceitas se a exclusividade vencer com o imóvel em negociação
   - **(banco)** (plano da Etapa 9) Exclusividade que vence com contrato em análise: `aprovar_contrato()` exige o imóvel `disponivel` e falharia, embora o contrato assinado seja uma venda real. Confirmar também que `remover_corretor()` pode seguir cancelando as propostas de imóvel `expirado`
 - Etapa 13:
+  - (decisão de 09/11/2026) WhatsApp no piloto: criar o número próprio do PAUTA, verificar a empresa (CNPJ) e cadastrar o cartão na Meta, aprovar os modelos no número de verdade e trocar as variáveis na Vercel. Confirmar o custo por mensagem (cerca de R$ 0,035 por aviso de utilidade, desde 01/10/2026) e o cuidado para a Meta não reclassificar um modelo como marketing (quase 10 vezes mais caro)
   - (plano da Etapa 9) A % da comissão do PAUTA precisa estar decidida antes do piloto, porque entra no texto do contrato
   - (plano da Etapa 9) Arquivos de contrato enviados sem confirmação ficam no bucket: limpar os que não têm linha em `contratos`. Desde a auditoria da Etapa 9 são no máximo 3 por proposta
   - **(banco)** (auditoria da Etapa 9) `vendas_registradas()` devolve no máximo 200 vendas: `vendaDoContrato()` procura só entre elas e o total "A receber" do painel soma só elas. Filtrar por contrato e somar no banco, sem limite
@@ -592,3 +593,4 @@ PAUTA (antes, Domora):
 - 09/11/2026 · Hevelyn · Etapa 9, passo 9.4d: teste do fluxo inteiro do contrato pela tela e 5 testes de operações simultâneas pela API; bateria completa com 310 passando.
 - 09/11/2026 · Hevelyn · Etapa 9, passos 9.5 e 9.6: auditoria (nada crítico) e correções: contrato só em PDF também pela API (assinatura do servidor), limite de 3 arquivos sem registro, motivo antigo escondido, contador do vendido, três itens separados e resposta perdida tratada. Migration `20261109181706_auditoria_etapa_9`
 - 09/11/2026 · Hevelyn · Etapa 9 fechada: auditoria feita, "Pronto quando" conferido e ROADMAP atualizado para o push
+- 09/11/2026 · Hevelyn · Decisão: WhatsApp pela Meta direto (Cloud API), com o número de teste gratuito até o piloto

@@ -58,7 +58,7 @@ O PAUTA é um web app responsivo (PWA), feito primeiro para celular e site, sem 
 | Código e hospedagem | GitHub e Vercel | Versionamento e publicação | GitHub na Etapa 1; Vercel na Etapa 13 |
 | E-mail | SMTP próprio (ex.: Resend) | E-mails de confirmação e recuperação em português | Etapa 13, antes do piloto |
 | Cobrança | Asaas | Mensalidade dos assinantes | Etapa 11 |
-| Avisos | API oficial do WhatsApp Business | Avisos de visita, proposta, contrato e vencimento da exclusividade | Etapa 10 (provedor em aberto) |
+| Avisos | API oficial do WhatsApp Business | Avisos de visita, proposta, contrato e vencimento da exclusividade | Etapa 10: Meta direto (Cloud API), com o número de teste gratuito até o piloto |
 
 Uma regra vale para toda a stack: chaves e senhas ficam no `.env.local`, e a chave secreta do Supabase nunca vai para o navegador.
 
@@ -144,10 +144,17 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 7. Visita | Pedido e confirmação | O corretor vê a resposta do proprietário | — |
 | 8. Proposta | Envio e aceite, várias ao mesmo tempo | Duas propostas aceitas deixam o imóvel em negociação | — |
 | 9. Contrato e venda | Envio, conferência, comissão | Aprovar marca vendido e recusa as outras numa operação só | — (o admin registra o valor em R$ do contrato; a % fica para antes do piloto) |
-| 10. Avisos | Lista no app e WhatsApp | Cada evento gera aviso nos dois canais | Provedor do WhatsApp |
+| 10. Avisos | Lista no app e WhatsApp | Cada evento gera aviso nos dois canais | — (provedor decidido em 09/11/2026) |
 | 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 09/11/2026 (provedor do WhatsApp)
+
+- O provedor do WhatsApp é a Meta direto (WhatsApp Cloud API), a API oficial, sem intermediário. Twilio e outros intermediários oficiais cobram uma taxa por mensagem além da Meta; a Z-API foi descartada porque não é oficial (funciona pelo WhatsApp Web) e o número pode ser bloqueado.
+- Até o fim do projeto, tudo precisa ser gratuito: usa-se só o número de teste da Meta, que não pede cartão nem verificação da empresa e manda para até 5 números cadastrados (a equipe e celulares de teste). Remetente genérico (+1 555), só modelos de mensagem, e nada de usuários reais nele.
+- O aviso no app nunca depende do WhatsApp. Sem as chaves da Meta no ambiente, o envio pelo WhatsApp é pulado e o aviso no app é criado normalmente, para quem não configurou a Meta e para os testes automáticos.
+- No piloto, troca-se o número de teste pelo número próprio do PAUTA, com a empresa verificada e um cartão cadastrado na Meta (Etapa 13). Só a configuração muda, não o código. O custo por mensagem fica para ser confirmado antes do piloto.
 
 ## Decisões tomadas em 09/11/2026 (auditoria da Etapa 9)
 
@@ -344,7 +351,7 @@ Estes pontos travam requisitos acima e precisam de resposta antes de virar códi
 **Fluxo da venda**
 
 - [ ] Exclusividade: com quanto tempo de antecedência sai o aviso de vencimento, e a renovação é por mais 6 meses?
-- [ ] WhatsApp: qual provedor da API oficial (Meta direto ou um intermediário como Twilio ou Z-API) e o custo por mensagem
+- [ ] WhatsApp: custo por mensagem no piloto (cerca de R$ 0,035 por aviso de utilidade, a confirmar na tabela da Meta). O provedor foi decidido em 09/11/2026
 
 **Termos** (não travam a Etapa 4, que usa um texto provisório; o texto final entra antes do piloto, na Etapa 13. Decidido em 26/10/2026)
 
