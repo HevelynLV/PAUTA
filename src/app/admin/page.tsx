@@ -3,9 +3,13 @@ import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 
 import { BotaoSair } from "@/components/BotaoSair";
+import { BotaoComissaoPaga } from "@/components/contrato/BotaoComissaoPaga";
 import { classesBotao } from "@/components/ui/Botao";
+import { SeloStatus } from "@/components/ui/SeloStatus";
 import { assinantesParaAtivar } from "@/lib/assinantesAdmin";
 import { exigirTipo } from "@/lib/auth";
+import { contratosParaConferir, vendasRegistradas, type VendaRegistrada } from "@/lib/contratos";
+import { formatarData, formatarPreco } from "@/lib/imovel";
 import { numerosDoPainel } from "@/lib/imoveisAdmin";
 
 export const metadata: Metadata = { title: "Painel" };
@@ -13,7 +17,7 @@ export const metadata: Metadata = { title: "Painel" };
 // Painel do admin (AdmPainel e SiteAdmPainel): o que está esperando por ele (e os
 // captados que esperam o dono, passo 4.7, e os assinantes para ativar, passo 5.2).
 // Os outros cartões chegam com as etapas de cada assunto (exclusividade vencendo
-// na 12, contratos e comissões na 9).
+// na 12) e as comissões do PAUTA das vendas registradas (Etapa 9).
 export default function Painel() {
   return (
     <Suspense fallback={<p className="px-5 pt-[22px] text-ink2">Carregando…</p>}>
@@ -24,7 +28,12 @@ export default function Painel() {
 
 async function Conteudo() {
   await exigirTipo("admin");
-  const [numeros, paraAtivar] = await Promise.all([numerosDoPainel(), assinantesParaAtivar()]);
+  const [numeros, paraAtivar, contratos, vendas] = await Promise.all([
+    numerosDoPainel(),
+    assinantesParaAtivar(),
+    contratosParaConferir(),
+    vendasRegistradas(),
+  ]);
 
   return (
     <div className="flex w-full max-w-[1140px] flex-col gap-4 px-5 pb-7 pt-[22px] md:gap-6 md:px-10 md:pt-8">
@@ -44,7 +53,7 @@ async function Conteudo() {
       </div>
 
       <p className="text-tiny font-bold uppercase tracking-[0.08em] text-ink2">Para fazer</p>
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-4">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5 md:gap-4">
         <Tile href="/admin/imoveis" numero={numeros.imoveisParaAprovar} rotulo="Imóveis para aprovar" icone={<path d="M3 10.5 12 3l9 7.5V21H3z" />} />
         <Tile
           href="/admin/assinantes?filtro=pendentes"
@@ -57,6 +66,17 @@ async function Conteudo() {
             </>
           }
           areia
+        />
+        <Tile
+          href="/admin/contratos"
+          numero={contratos.length}
+          rotulo="Contratos para conferir"
+          icone={
+            <>
+              <path d="M14 3H6v18h12V7z" />
+              <path d="M14 3v4h4M9 13l2 2 4-4" />
+            </>
+          }
         />
         <Tile
           href="/admin/edicoes"
@@ -73,7 +93,56 @@ async function Conteudo() {
           cinza
         />
       </div>
+
+      <Comissoes vendas={vendas} />
     </div>
+  );
+}
+
+// "Comissões do PAUTA" (RF32): primeiro as a receber, depois as 10 pagas mais recentes.
+// A comissão é paga fora do app; o admin marca quando recebe e pode desfazer.
+function Comissoes({ vendas }: { vendas: VendaRegistrada[] }) {
+  if (vendas.length === 0) return null;
+  const aReceber = vendas.filter((venda) => !venda.comissao_paga_em);
+  const pagas = vendas.filter((venda) => venda.comissao_paga_em).slice(0, 10);
+  const total = aReceber.reduce((soma, venda) => soma + Number(venda.comissao_valor), 0);
+
+  return (
+    <section aria-labelledby="comissoes-titulo" className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="comissoes-titulo" className="text-tiny font-bold uppercase tracking-[0.08em] text-ink2">
+          Comissões do PAUTA
+        </h2>
+        {aReceber.length > 0 && <span className="text-small text-ink2">A receber: {formatarPreco(total)}</span>}
+      </div>
+      <ul className="flex flex-col overflow-hidden rounded-cartao border border-line bg-card">
+        {[...aReceber, ...pagas].map((venda) => (
+          <li
+            key={venda.id}
+            className="flex flex-col gap-2 border-t border-line p-4 first:border-t-0 md:flex-row md:items-center md:justify-between md:gap-4"
+          >
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <b className="text-small">{venda.imovel_titulo}</b>
+                {venda.comissao_paga_em ? (
+                  <SeloStatus status="disponivel">Paga em {formatarData(venda.comissao_paga_em)}</SeloStatus>
+                ) : (
+                  <SeloStatus status="negociacao">A receber</SeloStatus>
+                )}
+              </div>
+              <span className="text-tiny text-ink2">
+                Vendida em {formatarData(venda.registrada_em)} · {venda.corretor_nome}
+                {venda.imobiliaria && ` (${venda.imobiliaria})`} · venda de {formatarPreco(venda.valor_final)}
+              </span>
+              <span className="text-small">
+                Comissão: <b>{formatarPreco(venda.comissao_valor)}</b>
+              </span>
+            </div>
+            <BotaoComissaoPaga vendaId={venda.id} paga={Boolean(venda.comissao_paga_em)} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
