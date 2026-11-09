@@ -9,7 +9,18 @@ import type { StatusProposta } from "@/lib/proposta";
 
 // "Recusar" e "Aceitar" de uma proposta nova e "Desfazer aceite" da aceita (ProImovel).
 // Com o imóvel fora do catálogo, ele só limpa a lista: aceitar e desfazer não valem mais.
-export function RespostaDaProposta({ id, status, noCatalogo }: { id: string; status: StatusProposta; noCatalogo: boolean }) {
+// Com o contrato em análise, desfazer o aceite não vale (o banco também recusa).
+export function RespostaDaProposta({
+  id,
+  status,
+  noCatalogo,
+  contratoEmAnalise = false,
+}: {
+  id: string;
+  status: StatusProposta;
+  noCatalogo: boolean;
+  contratoEmAnalise?: boolean;
+}) {
   const [erro, setErro] = useState<string>();
   const [ocupado, iniciar] = useTransition();
 
@@ -39,7 +50,7 @@ export function RespostaDaProposta({ id, status, noCatalogo }: { id: string; sta
           )}
         </div>
       )}
-      {status === "aceita" && noCatalogo && (
+      {status === "aceita" && noCatalogo && !contratoEmAnalise && (
         <Botao variante="secundario" tamanho="pequeno" disabled={ocupado} onClick={() => responder(desfazerAceite)}>
           Desfazer aceite
         </Botao>

@@ -3,7 +3,7 @@
 ## Onde paramos
 
 Última atualização: 06/11/2026 · por Hevelyn
-Etapa atual: 9. Contrato e venda, 9.1 a 9.4b feitos, na branch `etapa-9-contrato` (commits locais, ainda sem push). Próximo: passo 9.4c (o que o proprietário vê: selo "Contrato em análise" e "Vendida por R$ X em..." em Meus imóveis, "Ver contrato" na aba Propostas, sem "Desfazer aceite" com contrato em análise).
+Etapa atual: 9. Contrato e venda, 9.1 a 9.4c feitos, na branch `etapa-9-contrato` (commits locais, ainda sem push). Próximo: passo 9.4d (`e2e/contratos.spec.ts` com o fluxo inteiro, do cadastro do imóvel ao vendido, e `e2e/contratos-simultaneos.spec.ts` com dois contratos do mesmo imóvel aprovados ao mesmo tempo), depois a bateria e2e completa.
 
 Etapa 9:
 - 9.1 feito (06/11/2026, Hevelyn): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 06/11/2026 (plano da Etapa 9)") e no CLAUDE.md. A % da comissão segue em aberto, mas não trava a etapa: o admin registra o valor em R$ do contrato. A cláusula da comissão é condição para aprovar, o PDF tem até 20 MB, e só o contrato em análise impede desfazer o aceite e retirar a proposta
@@ -37,6 +37,11 @@ Etapa 9:
   - Novos: `src/lib/contratos.ts` (leituras do admin), `src/app/admin/contratos/` (página, `DecisaoDoContrato.tsx`, actions `aprovarContrato`, `recusarContrato` e `definirComissaoPaga`), `src/components/contrato/PreviaDoContrato.tsx` e `BotaoComissaoPaga.tsx`
   - Diferente do plano: uma página com `?id=` em vez de `/admin/contratos/[id]`, igual à fila de imóveis. A venda de um contrato é procurada entre as 200 mais recentes que `vendas_registradas()` devolve; depois do piloto, a função precisa de um filtro (Etapa 13)
   - `e2e/contratos-conferencia.spec.ts`: 12 de 12 (6 em cada tamanho de tela): aprovar com valor final ajustado e comissão inválida, recusar com e sem motivo, tela velha, corretor sem acesso, corretor chamando a action do admin e comissão marcada e desfeita no painel. Também passaram `contratos-envio`, `admin-assinantes`, `areas` e `imovel-aprovar` (91 passando, 1 pulado). Lint e build passam
+- 9.4c feito (09/11/2026, Hevelyn), sem migration:
+  - Meus imóveis e a página do imóvel: selo "Contrato em análise" (vem antes de "Em negociação") com "Contrato enviado por X em DD/MM/AAAA. A equipe PAUTA está conferindo.", e "Vendida por R$ X em DD/MM/AAAA" no vendido. O cálculo do selo fica em `seloDoResumo()`, em `src/lib/propostas.ts`
+  - Aba Propostas: a proposta com contrato mostra o que aconteceu (em análise, aprovado ou devolvido) e "Ver contrato". Com o contrato em análise, "Desfazer aceite" some
+  - O dono nunca vê a comissão: só o valor final e a data, que vêm de `resumo_de_propostas()`
+  - `e2e/contratos-proprietario.spec.ts`: 6 de 6 (3 em cada tamanho de tela). Também passaram `propostas` e `imovel-lista` (37 passando, 1 pulado). Lint e build passam
 
 Melhorias dos testes de uso (05 e 06/11/2026, Hevelyn), na branch `melhorias-cadastro-agenda`:
 - Telefone só de celular (DDD + 9 + 8 dígitos), na tela, no servidor e no banco; `CampoTelefone` com máscara, aceitando 0 e +55 colados, em cadastro, convite e Minha conta. Exemplos dentro dos campos nas telas de criar conta e de convite
@@ -565,3 +570,4 @@ PAUTA (antes, Domora):
 - 06/11/2026 · Hevelyn · Etapa 9, passo 9.3a: envio do PDF pelo servidor (link assinado, conferência do conteúdo, registro) e abertura com link curto, ainda sem tela. Testes com arquivos de verdade no Storage: 8 de 8
 - 06/11/2026 · Hevelyn · Etapa 9, passo 9.3b: janela de envio do contrato e acompanhamento em Negociações (em análise, recusado com motivo, reenvio, ver PDF). Corrigida a conferência dos bytes, que prendia o envio. 16 testes novos pela tela.
 - 09/11/2026 · Hevelyn · Etapa 9, passos 9.4a e 9.4b: conferência do contrato pelo admin (três itens, aprovar com valor final e comissão, recusar com motivo, pré-visualização do PDF no computador), tela Venda registrada e comissões do PAUTA no painel. 12 testes novos.
+- 09/11/2026 · Hevelyn · Etapa 9, passo 9.4c: o proprietário vê o contrato em análise, o devolvido e a venda (valor final e data, sem a comissão), abre o PDF e não desfaz o aceite com o contrato em análise. 6 testes novos.

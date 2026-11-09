@@ -10,14 +10,14 @@ import { SeloStatus, type Status } from "@/components/ui/SeloStatus";
 import { exigirTipo } from "@/lib/auth";
 import { formatarData, formatarPreco } from "@/lib/imovel";
 import { imoveisDoDono, type ImovelNaLista } from "@/lib/imoveis";
-import { resumoDePropostas, type ResumoDePropostas } from "@/lib/propostas";
+import { resumoDePropostas, seloDoResumo, type ResumoDePropostas } from "@/lib/propostas";
 import { pedidosParaConfirmar } from "@/lib/visitas";
 
 export const metadata: Metadata = { title: "Meus imóveis" };
 
 // "Meus imóveis" (ProImoveis no celular, SiteProImoveis no computador): os imóveis
 // do proprietário com o status de cada um. "Em negociação" vem do banco, por
-// resumoDePropostas; "contrato em análise" chega com os contratos (Etapa 9).
+// resumoDePropostas, que também traz o contrato em análise e a venda (Etapa 9).
 export default function MeusImoveis({ searchParams }: PageProps<"/proprietario">) {
   return (
     <Suspense fallback={<p className="px-5 pt-[22px] text-ink2">Carregando…</p>}>
@@ -98,7 +98,7 @@ function CartaoDoImovel({
   paraConfirmar: number;
   propostas?: ResumoDePropostas;
 }) {
-  const selo: Status = propostas?.emNegociacao ? "negociacao" : seloDo[imovel.status];
+  const selo: Status = seloDoResumo(propostas) ?? seloDo[imovel.status];
   const emAberto = propostas?.emAberto ?? 0;
   // O rascunho continua o cadastro (a partir das fotos); os outros abrem a página do imóvel.
   // O captado abre o aceite do termo (passo 4.7).
@@ -143,6 +143,16 @@ function CartaoDoImovel({
         )}
         {imovel.status === "disponivel" && imovel.exclusividade_fim && (
           <span className="text-tiny text-ink2">Exclusividade até {formatarData(imovel.exclusividade_fim)}</span>
+        )}
+        {imovel.status === "disponivel" && propostas?.contratoEnviadoEm && (
+          <span className="text-tiny text-ink2">
+            Contrato enviado por {propostas.contratoCorretor} em {formatarData(propostas.contratoEnviadoEm)}. A equipe PAUTA está conferindo.
+          </span>
+        )}
+        {imovel.status === "vendido" && propostas?.vendaValor != null && propostas.vendaEm && (
+          <span className="text-tiny font-bold text-ink">
+            Vendida por {formatarPreco(propostas.vendaValor)} em {formatarData(propostas.vendaEm)}
+          </span>
         )}
         {imovel.status === "vendido" && <span className="text-tiny text-ink2">Não aparece mais no catálogo.</span>}
         {paraConfirmar > 0 && (

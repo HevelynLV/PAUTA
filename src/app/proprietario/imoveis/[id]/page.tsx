@@ -11,7 +11,7 @@ import { exigirTipo } from "@/lib/auth";
 import { diaDe, instanteDe } from "@/lib/horariosDeVisita";
 import { formatarData, formatarPreco } from "@/lib/imovel";
 import { capaDoImovel, imovelDoDono, type StatusImovel } from "@/lib/imoveis";
-import { propostasRecebidas, resumoDePropostas } from "@/lib/propostas";
+import { propostasRecebidas, resumoDePropostas, seloDoResumo } from "@/lib/propostas";
 import { agendaDeVisitas } from "@/lib/visitas";
 
 import { ContatoDoImovel } from "./ContatoDoImovel";
@@ -68,7 +68,8 @@ async function Conteudo({
         resumoDePropostas(id),
       ])
     : [null, null, null];
-  const selo: Status = resumo?.get(id)?.emNegociacao ? "negociacao" : seloDo[imovel.status];
+  const resumoDoImovel = resumo?.get(id);
+  const selo: Status = seloDoResumo(resumoDoImovel) ?? seloDo[imovel.status];
   const abaPropostas = aba === "propostas";
 
   return (
@@ -117,6 +118,17 @@ async function Conteudo({
             {imovel.status === "disponivel" && imovel.exclusividade_fim && (
               <span className="text-tiny text-ink2">
                 Exclusividade PAUTA até {formatarData(imovel.exclusividade_fim)}
+              </span>
+            )}
+            {imovel.status === "disponivel" && resumoDoImovel?.contratoEnviadoEm && (
+              <span className="text-tiny text-ink2">
+                Contrato enviado por {resumoDoImovel.contratoCorretor} em {formatarData(resumoDoImovel.contratoEnviadoEm)}. A equipe PAUTA
+                está conferindo.
+              </span>
+            )}
+            {imovel.status === "vendido" && resumoDoImovel?.vendaValor != null && resumoDoImovel.vendaEm && (
+              <span className="text-small font-bold">
+                Vendida por {formatarPreco(resumoDoImovel.vendaValor)} em {formatarData(resumoDoImovel.vendaEm)}
               </span>
             )}
             {imovel.status === "pendente" && (
