@@ -1,3 +1,4 @@
+import { BotaoVerContrato } from "@/components/contrato/BotaoVerContrato";
 import { Cartao } from "@/components/ui/Cartao";
 import { SeloStatus } from "@/components/ui/SeloStatus";
 import { formatarTelefone } from "@/lib/conta";
@@ -9,7 +10,9 @@ import { RespostaDaProposta } from "./RespostaDaProposta";
 
 // Proposta para o proprietário (ProImovel). Ele sempre vê nome, imobiliária, CRECI e
 // contato do corretor (RNF07), e o nome do comprador quando o corretor informou.
-// Primeiro as que pedem resposta, depois as aceitas e, por fim, o histórico.
+// Primeiro as que pedem resposta, depois as aceitas e, por fim, o histórico. Na aceita, o
+// contrato enviado pelo corretor (Etapa 9): o dono vê e abre o PDF, e com o contrato em
+// análise não desfaz o aceite.
 export function ListaDePropostas({ propostas, noCatalogo }: { propostas: PropostaRecebida[]; noCatalogo: boolean }) {
   const peso = (proposta: PropostaRecebida) =>
     proposta.status === "aguardando" ? 0 : proposta.status === "aceita" ? 1 : 2;
@@ -27,7 +30,13 @@ export function ListaDePropostas({ propostas, noCatalogo }: { propostas: Propost
 }
 
 function CartaoDeProposta({ proposta, noCatalogo }: { proposta: PropostaRecebida; noCatalogo: boolean }) {
-  const selo = seloDaProposta(proposta.status, "proprietario");
+  const contrato = proposta.status === "aceita" ? proposta.contrato_status : null;
+  const selo =
+    contrato === "em_analise"
+      ? { status: "contrato" as const, rotulo: "Contrato em análise" }
+      : contrato === "aprovado"
+        ? { status: "vendido" as const, rotulo: "Vendida" }
+        : seloDaProposta(proposta.status, "proprietario");
   const iniciais = proposta.corretor_nome
     .split(/\s+/)
     .slice(0, 2)
@@ -66,7 +75,19 @@ function CartaoDeProposta({ proposta, noCatalogo }: { proposta: PropostaRecebida
           </a>
         </div>
       </div>
-      {propostaEmAberto(proposta.status) && <RespostaDaProposta id={proposta.id} status={proposta.status} noCatalogo={noCatalogo} />}
+      {contrato && (
+        <div className="flex flex-col items-start gap-1 rounded-[14px] bg-roxo-soft px-3.5 py-3 text-small">
+          <span>
+            {contrato === "em_analise" && "O corretor enviou o contrato assinado. A equipe PAUTA está conferindo."}
+            {contrato === "aprovado" && "Contrato aprovado pela equipe PAUTA."}
+            {contrato === "recusado" && "A equipe PAUTA devolveu o contrato ao corretor, que pode corrigir e reenviar."}
+          </span>
+          {proposta.contrato_id && <BotaoVerContrato id={proposta.contrato_id} />}
+        </div>
+      )}
+      {propostaEmAberto(proposta.status) && (
+        <RespostaDaProposta id={proposta.id} status={proposta.status} noCatalogo={noCatalogo} contratoEmAnalise={contrato === "em_analise"} />
+      )}
     </Cartao>
   );
 }

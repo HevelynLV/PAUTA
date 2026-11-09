@@ -6705,6 +6705,910 @@ do $$ declare v text; begin
 end $$;
 
 -- ---------------------------------------------------------------
+-- 19. Contrato e venda (migration 20261106221451_contratos)
+-- ---------------------------------------------------------------
+
+-- Caminho do arquivo número p_n de uma proposta.
+create or replace function pg_temp.caminho(p_proposta uuid, p_n int default 1)
+returns text
+language sql
+as $$
+  select p_proposta || '/' || pg_temp.u(p_n) || '.pdf';
+$$;
+
+-- Grava o arquivo como o Storage faria, sem passar pelas regras do bucket.
+create or replace function pg_temp.arquivo_de_contrato(p_proposta uuid, p_dono uuid, p_n int default 1,
+                                                       p_tamanho bigint default 1000)
+returns text
+language sql
+as $$
+  insert into storage.objects (bucket_id, name, owner_id, metadata)
+  values ('contratos', pg_temp.caminho(p_proposta, p_n), p_dono::text,
+          jsonb_build_object('size', p_tamanho, 'mimetype', 'application/pdf', 'eTag', '"teste-' || p_n || '"'))
+  returning name;
+$$;
+
+-- A assinatura que o servidor do app daria depois de ver que o arquivo é PDF (auditoria
+-- da Etapa 9), feita para o dono do arquivo. Security definer: a função temporária é do
+-- dono da conexão, que lê o Vault mesmo depois do entrar_como. Sem o segredo no Vault,
+-- devolve null e os testes de envio falham, avisando que falta configurar.
+create or replace function pg_temp.assinatura(p_proposta uuid, p_caminho text, p_corretor uuid default null)
+returns text
+language sql
+security definer
+as $$
+  select encode(extensions.hmac(p_proposta::text || ':' || p_caminho || ':'
+                                || coalesce(p_corretor::text, o.owner_id) || ':' || (o.metadata ->> 'eTag'),
+                                (select ds.decrypted_secret from vault.decrypted_secrets ds where ds.name = 'pauta_contrato_pdf'),
+                                'sha256'), 'hex')
+  from storage.objects o
+  where o.bucket_id = 'contratos' and o.name = p_caminho;
+$$;
+
+-- Grava um contrato direto, sem passar pelas regras, para montar a situação do teste.
+create or replace function pg_temp.criar_contrato(p_proposta uuid, p_status text default 'em_analise', p_n int default 1)
+returns uuid
+language sql
+as $$
+  insert into public.contratos (proposta_id, imovel_id, enviado_por, caminho, nome_arquivo, tamanho_bytes,
+                                status, motivo_recusa, respondido_em)
+  select p.id, p.imovel_id, p.corretor_id, pg_temp.caminho(p_proposta, p_n), 'contrato.pdf', 1000,
+         p_status::public.status_contrato,
+         case when p_status = 'recusado' then 'Falta assinatura' end,
+         case when p_status <> 'em_analise' then now() end
+  from public.propostas p where p.id = p_proposta
+  returning id;
+$$;
+
+-- Textos das chamadas, para o pg_temp.tentar.
+create or replace function pg_temp.enviar_pdf(p_proposta uuid, p_caminho text default null)
+returns text
+language sql
+as $$
+  select format('select public.enviar_contrato(%L, %L, %L, %L)', p_proposta,
+                coalesce(p_caminho, pg_temp.caminho(p_proposta)), 'contrato.pdf',
+                coalesce(pg_temp.assinatura(p_proposta, coalesce(p_caminho, pg_temp.caminho(p_proposta))), 'sem-arquivo'));
+$$;
+
+create or replace function pg_temp.aprovar(p_contrato uuid, p_valor text default '450000', p_comissao text default '9000')
+returns text
+language sql
+as $$
+  select format('select public.aprovar_contrato(%L, %L, %L)', p_contrato, p_valor, p_comissao);
+$$;
+
+create or replace function pg_temp.guardar_arquivo(p_caminho text, p_dono uuid)
+returns text
+language sql
+as $$
+  select format('insert into storage.objects (bucket_id, name, owner_id) values (''contratos'', %L, %L)', p_caminho, p_dono);
+$$;
+
+-- Enviar --------------------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; c uuid; a text; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    a := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1, 123456);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    c := public.enviar_contrato(p, a, E'  contrato\n final.pdf  ', pg_temp.assinatura(p, a));
+    select status || ' / ' || nome_arquivo || ' / ' || tamanho_bytes || ' / ' || (enviado_por = pg_temp.u(31))
+           || ' / ' || (imovel_id = im) || ' / ' || (respondido_em is null)
+    into v from public.contratos where id = c;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor envia da proposta aceita: nasce em análise, com o tamanho lido do Storage e o nome limpo',
+          'em_analise / contrato final.pdf / 123456 / true / true / true', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aguardando');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31));
+    perform pg_temp.arquivo_de_contrato(q, pg_temp.u(32));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar_pdf(p)) || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(q));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(q));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(q));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Sem proposta aceita, com proposta de outro, proprietário e admin não enviam contrato',
+          'bloqueado (P0001) proposta_nao_aceita / bloqueado (P0001) proposta_nao_encontrada / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; im uuid; im2 uuid; p uuid; q uuid; r uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    im2 := pg_temp.criar_imovel(pg_temp.u(1), 'vendido');
+    perform pg_temp.criar_assinante(pg_temp.u(33), 'bloqueado');
+    perform pg_temp.criar_assinante(pg_temp.u(34), 'vencido');
+    p := pg_temp.criar_proposta(im, pg_temp.u(33), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(34), 'aceita');
+    r := pg_temp.criar_proposta(im2, pg_temp.u(31), 'aceita');
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(33));
+    perform pg_temp.arquivo_de_contrato(q, pg_temp.u(34));
+    perform pg_temp.arquivo_de_contrato(r, pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    v := pg_temp.tentar(pg_temp.enviar_pdf(p));
+    perform pg_temp.entrar_como(pg_temp.u(34));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(q));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(r));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Bloqueado e vencido não enviam contrato, nem com o imóvel fora do catálogo',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (P0001) imovel_fora_do_catalogo', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; a text; b text; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    b := pg_temp.arquivo_de_contrato(q, pg_temp.u(32));
+    a := pg_temp.arquivo_de_contrato(p, pg_temp.u(32), 2);
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 3, 20971521);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar_pdf(p));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(p, b));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(p, a));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(p, pg_temp.caminho(p, 3)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Arquivo inexistente, de outra pasta, de outro dono ou acima de 20 MB é recusado',
+          'bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido', v);
+end $$;
+
+do $$ declare v text; x text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 2);
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    c := public.enviar_contrato(p, pg_temp.caminho(p, 1), 'a.pdf', pg_temp.assinatura(p, pg_temp.caminho(p, 1)));
+    v := pg_temp.tentar(pg_temp.enviar_pdf(p, pg_temp.caminho(p, 2)));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.recusar_contrato(c, 'Falta assinatura');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(p, pg_temp.caminho(p, 1)));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(p, pg_temp.caminho(p, 2)));
+    select count(*)::text into x from public.contratos where proposta_id = p;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Um contrato em análise por proposta; depois de recusado, reenvia com outro arquivo e o antigo fica',
+          'bloqueado (P0001) contrato_em_analise / bloqueado (P0001) arquivo_invalido / permitido / 2', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('insert into public.contratos (proposta_id, imovel_id, enviado_por, caminho, nome_arquivo, tamanho_bytes)
+                                values (%L, %L, %L, ''x'', ''x'', 1)', p, im, pg_temp.u(31)));
+    v := v || ' / ' || pg_temp.tentar(format('update public.contratos set status = ''aprovado'' where id = %L', c));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || pg_temp.tentar(format('update public.contratos set status = ''aprovado'' where id = %L', c));
+    v := v || ' / ' || pg_temp.tentar(format('delete from public.contratos where id = %L', c));
+    v := v || ' / ' || pg_temp.tentar(format('insert into public.vendas (imovel_id, contrato_id, valor_final, comissao_valor)
+                                              values (%L, %L, 1, 1)', im, c));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Ninguém grava direto em contratos e vendas, nem o admin',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+-- Bucket --------------------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; im2 uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    im2 := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im2, pg_temp.u(31), 'aguardando');
+    r := pg_temp.criar_proposta(im2, pg_temp.u(32), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(p), pg_temp.u(31)));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(p, 2), pg_temp.u(32)));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.guardar_arquivo(p || '/qualquer.exe', pg_temp.u(31)));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(q), pg_temp.u(31)));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(r), pg_temp.u(31)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Bucket: só o corretor da proposta aceita envia, em nome próprio e com o nome no formato',
+          'permitido / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(p, 2), pg_temp.u(31)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Bucket: com contrato em análise, não entra outro arquivo', 'bloqueado (42501)', v);
+end $$;
+
+-- Quem vê: o RNF08 lista só quem enviou, o dono do imóvel e o admin.
+do $$ declare v text := ''; im uuid; p uuid; u int; n int; m int; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(21), 'aceita');
+    perform pg_temp.criar_contrato(p);
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(21));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    foreach u in array array[21, 1, 9, 31, 11, 2] loop
+      perform pg_temp.entrar_como(pg_temp.u(u));
+      select count(*) into n from public.contratos where proposta_id = p;
+      select count(*) into m from storage.objects where bucket_id = 'contratos' and name = pg_temp.caminho(p);
+      v := v || u || ':' || n || '/' || m || ' ';
+    end loop;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Contrato e arquivo: só quem enviou, o dono e o admin leem; outro corretor, o responsável e outro dono não',
+          '21:1/1 1:1/1 9:1/1 31:0/0 11:0/0 2:0/0 ', v);
+end $$;
+
+do $$ declare v text := ''; im uuid; p uuid; n int; m int; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.criar_contrato(p);
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31));
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'bloqueado');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    select count(*) into n from public.contratos where proposta_id = p;
+    select count(*) into m from storage.objects where bucket_id = 'contratos' and name = pg_temp.caminho(p);
+    v := n || ' / ' || m;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor bloqueado não lê o contrato nem o arquivo', '0 / 0', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; n int; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);  -- sem registro
+    perform pg_temp.arquivo_de_contrato(q, pg_temp.u(32), 2);  -- registrado
+    perform pg_temp.criar_contrato(q, 'em_analise', 2);
+    perform pg_temp.arquivo_de_contrato(q, pg_temp.u(31), 3);  -- de outro corretor
+    perform set_config('storage.allow_delete_query', 'true', true);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    delete from storage.objects where bucket_id = 'contratos' and name = pg_temp.caminho(p, 1);
+    get diagnostics n = row_count;
+    v := n::text;
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    delete from storage.objects where bucket_id = 'contratos' and name = pg_temp.caminho(q, 2);
+    get diagnostics n = row_count;
+    v := v || ' / ' || n;
+    delete from storage.objects where bucket_id = 'contratos' and name = pg_temp.caminho(q, 3);
+    get diagnostics n = row_count;
+    v := v || ' / ' || n;
+    update storage.objects set name = 'trocado' where bucket_id = 'contratos' and name = pg_temp.caminho(q, 2);
+    get diagnostics n = row_count;
+    v := v || ' / ' || n;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Quem enviou apaga o próprio arquivo sem registro; contrato registrado não é apagado nem trocado',
+          '1 / 0 / 0 / 0', v);
+end $$;
+
+-- Aprovar -------------------------------------------------------
+
+do $$ declare v text; im uuid; p uuid; q uuid; r uuid; c uuid; d uuid; vp uuid; vc uuid; vf uuid; vr uuid; k uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_assinante(pg_temp.u(33), 'ativo');
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    r := pg_temp.criar_proposta(im, pg_temp.u(33), 'aguardando');
+    c := pg_temp.criar_contrato(p);
+    d := pg_temp.criar_contrato(q, 'em_analise', 2);
+    vp := pg_temp.criar_visita(im, pg_temp.u(31), now() + interval '2 days', 'pendente');
+    vc := pg_temp.criar_visita(im, pg_temp.u(32), now() + interval '3 days', 'confirmada');
+    vf := pg_temp.criar_visita(im, pg_temp.u(33), now() - interval '3 days', 'confirmada');
+    vr := pg_temp.criar_visita(im, pg_temp.u(33), now() - interval '2 days', 'pendente');
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    k := public.aprovar_contrato(c, 460000.555, 9200, true);
+    select i.status || ' / ' || (select status from public.propostas where id = p)
+           || ' / ' || (select status from public.propostas where id = q)
+           || ' / ' || (select status from public.propostas where id = r)
+           || ' / ' || (select status from public.contratos where id = c)
+           || ' / ' || (select status || ':' || motivo_recusa from public.contratos where id = d)
+           || ' / ' || (select status from public.visitas where id = vp)
+           || ' / ' || (select status from public.visitas where id = vc)
+           || ' / ' || (select status from public.visitas where id = vf)
+           || ' / ' || (select status from public.visitas where id = vr)
+           || ' / ' || (select valor_final || ':' || comissao_valor || ':' || (comissao_paga_em is not null) || ':' || (comissao_marcada_por = pg_temp.u(9))
+                        from public.vendas where id = k)
+           || ' / ' || (select (cancelada_por = pg_temp.u(9)) from public.visitas where id = vp)
+           || ' / ' || (select valor from public.propostas where id = p)
+    into v from public.imoveis i where i.id = im;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Aprovar, tudo junto: vendido, outras recusadas, outro contrato recusado, visitas canceladas e venda registrada',
+          'vendido / aceita / recusada / recusada / aprovado / recusado:Imóvel vendido por outra proposta / cancelada / cancelada / confirmada / cancelada / 460000.56:9200.00:true:true / true / 450000.00', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.aprovar_contrato(c, 450000, 9000);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := pg_temp.no_catalogo() || ' / ' || public.imovel_no_catalogo(im);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Imóvel vendido sai do catálogo', '0 / false', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.aprovar(c));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_contrato(%L, ''x'')', c));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c));
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor, dono e responsável não aprovam nem recusam contrato',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+do $$ declare v text; x text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := pg_temp.tentar(pg_temp.aprovar(c, '0'));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c, 'NaN'));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c, 'Infinity'));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c, '450000', '0'));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c, '450000', '-1'));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c, '450000', 'NaN'));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c, '450000', '450000.01'));
+    select i.status || ' / ' || (select count(*) from public.vendas where imovel_id = im) into x
+    from public.imoveis i where i.id = im;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Valor final e comissão inválidos são recusados e nada muda',
+          'bloqueado (P0001) valor_invalido / bloqueado (P0001) valor_invalido / bloqueado (P0001) valor_invalido / bloqueado (P0001) comissao_invalida / bloqueado (P0001) comissao_invalida / bloqueado (P0001) comissao_invalida / bloqueado (P0001) comissao_invalida / disponivel / 0', v);
+end $$;
+
+-- O caso de dois contratos do mesmo imóvel, em sequência. A corrida de verdade, com duas
+-- conexões, fica no e2e (passo 9.4d): o roteiro roda numa conexão só.
+do $$ declare v text; x text; im uuid; p uuid; q uuid; c uuid; d uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    d := pg_temp.criar_contrato(q, 'em_analise', 2);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.aprovar_contrato(c, 450000, 9000);
+    v := pg_temp.tentar(pg_temp.aprovar(d));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(c));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_contrato(%L, ''x'')', c));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_contrato(%L, ''x'')', d));
+    select count(*)::text into x from public.vendas where imovel_id = im;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Dois contratos do mesmo imóvel: só um vende, e o conferido não muda mais',
+          'bloqueado (P0001) imovel_fora_do_catalogo / bloqueado (P0001) imovel_fora_do_catalogo / bloqueado (P0001) contrato_ja_conferido / bloqueado (P0001) contrato_ja_conferido / 1', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; q uuid; c uuid; d uuid; e uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    c := pg_temp.criar_contrato(p, 'aprovado');
+    e := pg_temp.criar_contrato(q, 'em_analise', 2);
+    v := pg_temp.tentar(format('update public.contratos set status = ''aprovado'', respondido_em = now() where id = %L', e));
+    d := pg_temp.criar_contrato(q, 'recusado', 3);
+    v := v || ' / ' || pg_temp.tentar(format('update public.contratos set motivo_recusa = E''\n '' where id = %L', d));
+    v := v || ' / ' || pg_temp.tentar(format('update public.contratos set motivo_recusa = null where id = %L', d));
+    v := v || ' / ' || pg_temp.tentar(format('update public.contratos set respondido_em = null where id = %L', d));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Índice barra o segundo contrato aprovado do imóvel, e os checks barram contrato incoerente',
+          'bloqueado (23505) / bloqueado (23514) / bloqueado (23514) / bloqueado (23514)', v);
+end $$;
+
+-- Falha na última escrita (venda já registrada para o imóvel): prova que nada fica pela metade.
+do $$ declare v text; x text; im uuid; p uuid; q uuid; c uuid; d uuid; vp uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    d := pg_temp.criar_contrato(q, 'recusado', 2);
+    c := pg_temp.criar_contrato(p);
+    vp := pg_temp.criar_visita(im, pg_temp.u(32));
+    insert into public.vendas (imovel_id, contrato_id, valor_final, comissao_valor) values (im, d, 1, 1);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := pg_temp.tentar(pg_temp.aprovar(c));
+    select i.status || ' / ' || (select status from public.propostas where id = q)
+           || ' / ' || (select status from public.contratos where id = c)
+           || ' / ' || (select status from public.visitas where id = vp)
+    into x from public.imoveis i where i.id = im;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Aprovar é uma operação só: falhando na última escrita, nada muda',
+          'bloqueado (23505) / disponivel / aceita / em_analise / pendente', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'bloqueado');
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := pg_temp.tentar(pg_temp.aprovar(c));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Contrato de corretor bloqueado pode ser aprovado', 'permitido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aguardando');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := pg_temp.tentar(pg_temp.aprovar(c));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.aprovar(pg_temp.u(77)));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_contrato(%L, ''x'')', pg_temp.u(77)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Aprovar exige a proposta aceita; contrato inexistente dá erro claro',
+          'bloqueado (P0001) proposta_encerrada / bloqueado (P0001) contrato_nao_encontrado / bloqueado (P0001) contrato_nao_encontrado', v);
+end $$;
+
+-- Recusar -------------------------------------------------------
+
+do $$ declare v text; x text; im uuid; p uuid; q uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.criar_assinante(pg_temp.u(33), 'ativo');
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := pg_temp.tentar(format('select public.recusar_contrato(%L, %L)', c, '   '));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_contrato(%L, E''\n\t'')', c));
+    v := v || ' / ' || pg_temp.tentar(format('select public.recusar_contrato(%L, %L)', c, repeat('a', 1001)));
+    perform public.recusar_contrato(c, E'  Falta assinatura na página 4\n');
+    select status || ' / ' || motivo_recusa into x from public.contratos where id = c;
+    v := v || ' / ' || x;
+    select string_agg(status::text, ' / ' order by status::text) into x from public.propostas where imovel_id = im;
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(33));
+    select c2.status into x from public.imovel_do_catalogo(im) c2;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Recusar exige motivo; o imóvel segue em negociação e as propostas continuam valendo',
+          'bloqueado (P0001) motivo_invalido / bloqueado (P0001) motivo_invalido / bloqueado (P0001) motivo_invalido / recusado / Falta assinatura na página 4 / aceita / aceita / em_negociacao', v);
+end $$;
+
+-- Proposta com contrato -----------------------------------------
+
+do $$ declare v text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format('select public.desfazer_aceite(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(format('select public.cancelar_proposta(%L)', p));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Com contrato em análise, o dono não desfaz o aceite e o corretor não retira',
+          'bloqueado (P0001) contrato_em_analise / bloqueado (P0001) contrato_em_analise', v);
+end $$;
+
+do $$ declare v text; x text; im uuid; p uuid; q uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    perform pg_temp.criar_contrato(p, 'recusado');
+    perform pg_temp.criar_contrato(q, 'recusado', 2);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format('select public.desfazer_aceite(%L)', p));
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := v || ' / ' || pg_temp.tentar(format('select public.cancelar_proposta(%L)', q));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select string_agg(status::text, ' / ' order by status::text) into x from public.propostas where imovel_id = im;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Com o contrato recusado, o dono desfaz e o corretor retira',
+          'permitido / permitido / aguardando / cancelada', v);
+end $$;
+
+-- Corretor removido ---------------------------------------------
+
+do $$ declare v text; x text; im uuid; p uuid; q uuid; r uuid; im2 uuid; im3 uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    im2 := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
+    im3 := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
+    perform pg_temp.equipe_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(21), 'aceita');    -- contrato em análise
+    q := pg_temp.criar_proposta(im2, pg_temp.u(21), 'aceita');   -- venda aprovada
+    r := pg_temp.criar_proposta(im3, pg_temp.u(21), 'aceita');   -- sem contrato
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.criar_contrato(q, 'aprovado', 2);
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    select (select status::text from public.propostas where id = p)
+           || ' / ' || (select status::text from public.propostas where id = q)
+           || ' / ' || (select status::text from public.propostas where id = r)
+    into v;
+    perform public.recusar_contrato(c, 'Falta assinatura');
+    select status::text || ' ' || (cancelada_por = pg_temp.u(9)) into x from public.propostas where id = p;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Corretor removido: contrato em análise e venda ficam, a sem contrato sai; recusar o contrato cancela a proposta',
+          'aceita / aceita / cancelada / cancelada true', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.equipe_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(21), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := pg_temp.tentar(pg_temp.aprovar(c));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Contrato de corretor removido pode ser aprovado', 'permitido', v);
+end $$;
+
+-- Comissão e leituras -------------------------------------------
+
+do $$ declare v text; x text; im uuid; p uuid; c uuid; k uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    k := public.aprovar_contrato(c, 450000, 9000);
+    select (comissao_paga_em is null)::text into v from public.vendas where id = k;
+    perform public.definir_comissao_paga(k, true);
+    select (comissao_paga_em is null)::text into x from public.vendas where id = k;
+    v := v || ' / ' || x;
+    perform public.definir_comissao_paga(k, false);
+    select (comissao_paga_em is null and comissao_marcada_por is null)::text into x from public.vendas where id = k;
+    v := v || ' / ' || x;
+    v := v || ' / ' || pg_temp.tentar(format('select public.definir_comissao_paga(%L, true)', pg_temp.u(77)));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(format('select public.definir_comissao_paga(%L, true)', k));
+    select count(*)::text into x from public.vendas;
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select count(*)::text into x from public.vendas;
+    v := v || ' / ' || x;
+    select count(*)::text into x from public.vendas_registradas();
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    select r.valor_final || ':' || r.comissao_valor into x from public.vendas_registradas() r where r.id = k;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Comissão: o admin marca e desfaz; corretor e dono não mexem nem leem vendas',
+          'true / false / true / bloqueado (P0001) venda_nao_encontrada / bloqueado (42501) / 0 / 0 / 0 / 450000.00:9000.00', v);
+end $$;
+
+do $$ declare v text; x text; im uuid; p uuid; q uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aguardando');
+    perform pg_temp.criar_contrato(p, 'recusado', 1);
+    update public.contratos set enviado_em = now() - interval '1 day' where proposta_id = p;
+    c := pg_temp.criar_contrato(p, 'em_analise', 2);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    select m.contrato_status || ' / ' || (m.contrato_id = c) || ' / ' || (m.contrato_motivo is null) into v
+    from public.minhas_propostas(im) m;
+    select count(*)::text into x from public.contratos_para_conferir();
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select count(*)::text into x from public.contratos_para_conferir(c);
+    v := v || ' / ' || x;
+    select r.contrato_status::text into x from public.propostas_recebidas(im) r where r.id = p;
+    v := v || ' / ' || x;
+    select r.contrato_corretor || ' / ' || (r.venda_valor is null) into x from public.resumo_de_propostas(im) r;
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    select count(*)::text into x from public.contratos_para_conferir() r where r.imovel_id = im;
+    v := v || ' / ' || x;
+    select r.corretor_com_acesso || ' / ' || jsonb_array_length(r.outras_em_aberto) || ' / ' || (r.outras_em_aberto -> 0 ->> 'status')
+    into x from public.contratos_para_conferir(c) r;
+    v := v || ' / ' || x;
+    perform public.aprovar_contrato(c, 460000, 9000);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select r.venda_valor::text into x from public.resumo_de_propostas(im) r;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Leituras: cada um vê o contrato mais recente; a fila é só do admin; o dono vê a venda',
+          'em_analise / true / true / 0 / 0 / em_analise / Autônomo de Teste / true / 1 / true / 1 / aguardando / 460000.00', v);
+end $$;
+
+-- O roteiro roda numa conexão só e não prova a corrida com remover_corretor. Este teste só
+-- impede que a trava saia sem querer numa nova versão das funções.
+do $$ declare v text; begin
+  select string_agg(p.proname || ' ' || (pg_get_functiondef(p.oid) ~ 'where p\.id = v_[a-z]+( and p\.removido_em is null)?\s+for share'), ' / ' order by p.proname)
+    into v
+  from pg_proc p
+  join pg_namespace ns on ns.oid = p.pronamespace
+  where ns.nspname = 'public' and p.proname in ('enviar_contrato', 'recusar_contrato');
+  insert into resultado (teste, esperado, obtido)
+  values ('Enviar e recusar contrato travam o perfil, para disputar com remover_corretor',
+          'enviar_contrato true / recusar_contrato true', v);
+end $$;
+
+
+-- Auditoria da Etapa 9 ------------------------------------------------
+
+do $$ declare v text; begin
+  -- O segredo é gerado com 64 caracteres (README). Curto demais costuma ser o exemplo
+  -- copiado sem trocar: aí o servidor e o banco não chegam à mesma assinatura.
+  select case when coalesce(max(decrypted_secret), '') = '' then 'falta'
+              when max(length(decrypted_secret)) < 32 then 'curto demais'
+              else 'existe' end into v
+  from vault.decrypted_secrets where name = 'pauta_contrato_pdf';
+  insert into resultado (teste, esperado, obtido)
+  values ('O segredo pauta_contrato_pdf está no Vault, com o valor do .env.local (sem ele, nenhum contrato é registrado)', 'existe', v);
+end $$;
+
+-- Só o servidor do app, depois de ler o arquivo, sabe assinar: sem a assinatura certa,
+-- nem o próprio corretor registra o arquivo pela API.
+do $$ declare v text; im uuid; p uuid; a text; b text; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    a := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);
+    b := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 2);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, null)', p, a, 'x.pdf'));
+    v := v || ' / ' || pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', repeat('0', 64)));
+    v := v || ' / ' || pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', pg_temp.assinatura(p, b)));
+    v := v || ' / ' || pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', pg_temp.assinatura(p, a, pg_temp.u(32))));
+    v := v || ' / ' || (select string_agg(pg_get_function_identity_arguments(f.oid), '; ')
+                        from pg_proc f join pg_namespace ns on ns.oid = f.pronamespace
+                        where ns.nspname = 'public' and f.proname = 'enviar_contrato');
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(p, a));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Contrato só com a assinatura do servidor: sem, inventada, de outro arquivo ou de outro corretor é recusado',
+          'bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / p_proposta uuid, p_caminho text, p_nome text, p_assinatura text / permitido', v);
+end $$;
+
+-- O eTag muda quando o conteúdo muda: a assinatura de antes não serve para o arquivo trocado.
+do $$ declare v text; im uuid; p uuid; a text; x text; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    a := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);
+    x := pg_temp.assinatura(p, a);
+    update storage.objects set metadata = metadata || '{"eTag": "\"outro\""}' where bucket_id = 'contratos' and name = a;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', x));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Arquivo trocado depois da conferência não é registrado com a assinatura antiga', 'bloqueado (P0001) arquivo_invalido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 2);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(p, 3), pg_temp.u(31)));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(p, 4), pg_temp.u(31)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Bucket: no máximo 3 arquivos sem registro por proposta', 'permitido / bloqueado (42501)', v);
+end $$;
+
+-- O corretor que perdeu a venda continua lendo o próprio contrato, recusado na venda (RNF08).
+do $$ declare v text; im uuid; p uuid; q uuid; c uuid; d uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    d := pg_temp.criar_contrato(q);
+    perform pg_temp.arquivo_de_contrato(q, pg_temp.u(32));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.aprovar_contrato(c, 450000, 9000);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    select status || ' / ' || motivo_recusa into v from public.contratos where id = d;
+    v := v || ' / ' || public.pode_ler_contrato(pg_temp.caminho(q))
+           || ' / ' || (select count(*) from storage.objects where bucket_id = 'contratos' and name = pg_temp.caminho(q));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Quem perdeu a venda lê o próprio contrato recusado e o arquivo dele',
+          'recusado / Imóvel vendido por outra proposta / true / 1', v);
+end $$;
+
+-- Aceita de novo depois de um contrato recusado: o motivo antigo some das duas telas; o
+-- contrato recusado depois do aceite continua aparecendo.
+do $$ declare v text; im uuid; p uuid; q uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    perform pg_temp.criar_contrato(p, 'recusado');
+    perform pg_temp.criar_contrato(q, 'recusado');
+    update public.contratos set enviado_em = now() - interval '2 hours' where proposta_id in (p, q);
+    update public.propostas set respondida_em = now() - interval '1 hour' where id = p;
+    update public.propostas set respondida_em = now() - interval '3 hours' where id = q;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    select coalesce(contrato_status::text, 'nenhum') into v from public.minhas_propostas(im);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := v || ' / ' || (select coalesce(contrato_status::text, 'nenhum') from public.minhas_propostas(im));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || (select string_agg(coalesce(contrato_status::text, 'nenhum'), ', ' order by respondida_em desc)
+                        from public.propostas_recebidas(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Contrato recusado antes do aceite atual não aparece; o recusado depois do aceite aparece',
+          'nenhum / recusado / nenhum, recusado', v);
+end $$;
+
+-- ---------------------------------------------------------------
 -- Resultado
 -- ---------------------------------------------------------------
 select

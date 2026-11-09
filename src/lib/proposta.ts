@@ -1,4 +1,5 @@
 import type { Status } from "@/components/ui/SeloStatus";
+import type { StatusContrato } from "@/lib/contrato";
 
 // Regras de proposta que valem no navegador e no servidor (RF23, RF24). As barreiras de
 // verdade estão no banco (migration 20261105180815_propostas); aqui ficam os rótulos,
@@ -48,6 +49,15 @@ export function seloDaProposta(status: StatusProposta, para: "corretor" | "propr
     case "cancelada":
       return { status: "pendente", rotulo: "Retirada" };
   }
+}
+
+// O selo das Negociações: depois do aceite, quem manda é o contrato. Proposta que saiu do
+// aceite (desfeito, retirada ou recusada) não leva mais o contrato antigo em conta.
+export function seloDaNegociacao(status: StatusProposta, contrato: StatusContrato | null): { status: Status; rotulo: string } {
+  if (status === "aceita" && contrato === "em_analise") return { status: "contrato", rotulo: "Contrato em análise" };
+  if (status === "aceita" && contrato === "recusado") return { status: "reprovado", rotulo: "Contrato recusado" };
+  if (status === "aceita" && contrato === "aprovado") return { status: "vendido", rotulo: "Vendido" };
+  return seloDaProposta(status, "corretor");
 }
 
 // O banco diz o motivo pelo hint do erro, nunca pelo texto.

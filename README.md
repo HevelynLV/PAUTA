@@ -67,6 +67,7 @@ Confira: `node -v`, `git --version` e `claude --version` respondem sem erro.
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
   SITE_URL=http://localhost:3000
   SUPABASE_SECRET_KEY=sb_secret_...
+  CONTRATO_PDF_SEGREDO=...
   ```
 
   | Variável | O que é | Onde pegar no painel do Supabase |
@@ -75,6 +76,7 @@ Confira: `node -v`, `git --version` e `claude --version` respondem sem erro.
   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Chave pública do app; pode ir para o navegador porque o RLS protege os dados | **Project Settings → API Keys → Publishable key** |
   | `SITE_URL` | Endereço do site, usado nos links dos e-mails de cadastro e de recuperação de senha. Sem barra no fim | Não vem do painel: em desenvolvimento é sempre `http://localhost:3000` |
   | `SUPABASE_SECRET_KEY` | Chave secreta, para os testes automáticos e para o "Excluir" de assinante pendente na tela do admin (só no servidor) | **Project Settings → API Keys → Secret keys → Add new secret key**, com o nome `testes-e2e-<seu nome>`. Copie o valor (`sb_secret_...`) |
+  | `CONTRATO_PDF_SEGREDO` | Segredo com que o servidor assina o contrato depois de conferir que o arquivo é PDF. O banco confere a assinatura com o mesmo valor, guardado no Vault com o nome `pauta_contrato_pdf`; sem ele, nenhum contrato é registrado (só no servidor) | Não vem do painel. É o mesmo valor para as duas pessoas: peça a quem criou, por mensagem particular. Quem cria pela primeira vez gera com `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` e guarda o mesmo valor no Vault (veja o "Atenção" do ROADMAP de 09/11/2026) |
 
   > ⚠️ **A secret key é pessoal.** Cada pessoa cria a sua; não compartilhe. Ela ignora todo o RLS: quem tem a chave lê e apaga qualquer dado do banco. Por isso ela **nunca** tem o prefixo `NEXT_PUBLIC_`, no app só é lida por `src/lib/supabase/admin.ts` (que tem `server-only` e só roda no servidor, depois de `exigirTipo("admin")`), nunca vai para a Vercel e **nunca vai para o GitHub** (o `.gitignore` ignora `.env*`). Se vazar, revogue-a no mesmo lugar onde criou. Desde o passo 5.2, em desenvolvimento o servidor do app usa esta chave pessoal para excluir assinante pendente com o usuário; sem ela, o "Excluir" da tela de assinantes dá erro. Na Vercel (Etapa 13) vai outra chave secreta, de produção, diferente das chaves pessoais (decisão de 22/10/2026).
 

@@ -13,7 +13,7 @@ import { formatarTelefone } from "@/lib/conta";
 import { lerFiltros, urlDoCatalogo } from "@/lib/filtrosCatalogo";
 import { diaDe, formatarHorario, seloDaVisita } from "@/lib/horariosDeVisita";
 import { formatarPreco } from "@/lib/imovel";
-import { propostaEmAberto, rotuloDaForma, seloDaProposta } from "@/lib/proposta";
+import { propostaEmAberto, rotuloDaForma, seloDaNegociacao } from "@/lib/proposta";
 import { minhasPropostas } from "@/lib/propostas";
 import { horariosOcupados, minhasVisitas } from "@/lib/visitas";
 
@@ -60,7 +60,7 @@ async function Conteudo({
   // Uma em aberto por vez; se não há, a mais recente diz se foi recusada.
   const propostaAberta = propostas.find((proposta) => propostaEmAberto(proposta.status));
   const recusada = !propostaAberta && propostas[0]?.status === "recusada";
-  const seloProposta = propostaAberta && seloDaProposta(propostaAberta.status, "corretor");
+  const seloProposta = propostaAberta && seloDaNegociacao(propostaAberta.status, propostaAberta.contrato_status);
 
   const preco = formatarPreco(imovel.preco);
   const endereco = `${imovel.endereco} · ${imovel.bairro} · Florianópolis`;

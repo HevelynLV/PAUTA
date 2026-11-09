@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { StatusContrato } from "@/lib/contrato";
 import { idDeImovelValido } from "@/lib/imovel";
 import type { FormaPagamento, StatusProposta } from "@/lib/proposta";
 import { criarClienteServidor } from "@/lib/supabase/server";
@@ -23,6 +24,11 @@ export type PropostaDoCorretor = {
   status: StatusProposta;
   criada_em: string;
   respondida_em: string | null;
+  // O contrato mais recente desta proposta, se houver.
+  contrato_id: string | null;
+  contrato_status: StatusContrato | null;
+  contrato_motivo: string | null;
+  contrato_enviado_em: string | null;
 };
 
 export type PropostaRecebida = {
@@ -41,6 +47,8 @@ export type PropostaRecebida = {
   creci: string;
   telefone: string;
   email: string;
+  contrato_id: string | null;
+  contrato_status: StatusContrato | null;
 };
 
 // As propostas do corretor logado, de todos os imóveis ou de um só, a mais nova primeiro.
@@ -61,7 +69,23 @@ export async function propostasRecebidas(imovelId: string): Promise<PropostaRece
   return (data ?? []) as PropostaRecebida[];
 }
 
-export type ResumoDePropostas = { emNegociacao: boolean; emAberto: number };
+export type ResumoDePropostas = {
+  emNegociacao: boolean;
+  emAberto: number;
+  // O contrato em análise mais antigo do imóvel (Etapa 9), se houver.
+  contratoCorretor: string | null;
+  contratoEnviadoEm: string | null;
+  // A venda, depois que o admin aprova o contrato: valor final e data, sem a comissão.
+  vendaValor: number | null;
+  vendaEm: string | null;
+};
+
+// O selo do proprietário: contrato em análise vem antes de "em negociação".
+export function seloDoResumo(resumo: ResumoDePropostas | undefined): "contrato" | "negociacao" | null {
+  if (resumo?.contratoEnviadoEm) return "contrato";
+  if (resumo?.emNegociacao) return "negociacao";
+  return null;
+}
 
 // Selo e contador do proprietário, por imóvel. "Em negociação" vem do banco: a tela não
 // pode refazer esse cálculo. Imóvel sem proposta não vem na lista.
@@ -71,8 +95,24 @@ export async function resumoDePropostas(imovelId?: string): Promise<Map<string, 
   const supabase = await criarClienteServidor();
   const { data, error } = await supabase.rpc("resumo_de_propostas", { p_imovel: imovelId ?? null });
   if (error) throw error;
-  for (const linha of (data ?? []) as { imovel_id: string; em_negociacao: boolean; em_aberto: number }[]) {
-    resumo.set(linha.imovel_id, { emNegociacao: linha.em_negociacao, emAberto: linha.em_aberto });
+  type Linha = {
+    imovel_id: string;
+    em_negociacao: boolean;
+    em_aberto: number;
+    contrato_corretor: string | null;
+    contrato_enviado_em: string | null;
+    venda_valor: number | null;
+    venda_em: string | null;
+  };
+  for (const linha of (data ?? []) as Linha[]) {
+    resumo.set(linha.imovel_id, {
+      emNegociacao: linha.em_negociacao,
+      emAberto: linha.em_aberto,
+      contratoCorretor: linha.contrato_corretor,
+      contratoEnviadoEm: linha.contrato_enviado_em,
+      vendaValor: linha.venda_valor,
+      vendaEm: linha.venda_em,
+    });
   }
   return resumo;
 }

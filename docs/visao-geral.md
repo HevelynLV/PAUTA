@@ -143,11 +143,33 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 6. Catálogo | Filtros, status disponível ou em negociação | Assinante ativo filtra no celular; bloqueado não vê nada | — (filtros decididos em 03/11/2026) |
 | 7. Visita | Pedido e confirmação | O corretor vê a resposta do proprietário | — |
 | 8. Proposta | Envio e aceite, várias ao mesmo tempo | Duas propostas aceitas deixam o imóvel em negociação | — |
-| 9. Contrato e venda | Envio, conferência, comissão | Aprovar marca vendido e recusa as outras numa operação só | % do PAUTA |
+| 9. Contrato e venda | Envio, conferência, comissão | Aprovar marca vendido e recusa as outras numa operação só | — (o admin registra o valor em R$ do contrato; a % fica para antes do piloto) |
 | 10. Avisos | Lista no app e WhatsApp | Cada evento gera aviso nos dois canais | Provedor do WhatsApp |
 | 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 09/11/2026 (auditoria da Etapa 9)
+
+- Só PDF é aceito como contrato, também para quem chama o banco direto pela API. O banco só registra o contrato com uma assinatura que o servidor do PAUTA dá depois de ler o começo do arquivo e ver que é PDF. A assinatura vale só para aquele arquivo (o eTag do Storage), aquela proposta e aquele corretor. O segredo da assinatura fica no Vault do Supabase e no ambiente do servidor, nunca no navegador, e sem usar a chave secreta do Supabase.
+- Cada proposta tem no máximo 3 arquivos de contrato enviados e ainda não registrados no Storage. A limpeza dos arquivos que sobram continua para a Etapa 13.
+
+## Decisões tomadas em 06/11/2026 (plano da Etapa 9)
+
+- A % da comissão do PAUTA continua em aberto, mas não trava a Etapa 9: o app guarda só o valor em R$ que o admin lê no contrato (RF32), e a % fica no texto do contrato. Precisa estar decidida antes do piloto.
+- A cláusula da comissão do PAUTA é condição para aprovar. O app não lê o PDF: quem confere é o admin, e "Aprovar" só libera com os três itens marcados (assinaturas de todas as partes; valor e imóvel; cláusula da comissão). A comissão precisa ser maior que zero, também no banco, e não pode passar do valor final. Sem a cláusula, o admin recusa com motivo e o corretor reenvia.
+- O PDF do contrato tem até 20 MB, com o limite no próprio bucket. Enviar o contrato confere também os primeiros bytes do arquivo, porque o bucket só olha o tipo declarado pelo navegador.
+- Só o contrato em análise trava a proposta. Enquanto o admin confere, o proprietário não desfaz o aceite e o corretor não retira a proposta. Depois de uma recusa, os dois voltam a poder, e o corretor também pode reenviar. Assim um corretor que some não deixa o imóvel preso em negociação.
+- Cada envio é um registro novo: reenviar não apaga o contrato recusado, e contrato registrado não é trocado nem apagado.
+- Corretor removido com contrato em análise: a proposta fica, porque o contrato assinado é uma venda real, e o admin decide. Se o admin recusar, a proposta é cancelada na mesma operação, porque o removido não pode reenviar.
+- Assinante bloqueado ou vencido não envia contrato nem abre o PDF. O contrato já enviado segue na fila e o admin pode aprovar, com um alerta na tela.
+- Ao vender, são canceladas as visitas pendentes de qualquer data e as confirmadas futuras. A confirmada que já passou fica como está, porque a visita aconteceu.
+- Dois contratos em análise no mesmo imóvel: ao aprovar um, o outro é recusado com um motivo automático ("Imóvel vendido por outra proposta") e a proposta dele é recusada.
+- O campo do valor final vem preenchido com o valor da proposta, e o admin ajusta se o contrato disser outro.
+- O admin marca a comissão como paga na hora de aprovar ou depois, no painel, e pode desfazer a marcação.
+- A venda e a comissão ficam numa tabela separada, que só o admin lê. O proprietário vê o valor final e a data da venda, nunca a comissão.
+- O contrato só é lido por quem o RNF08 lista: o responsável da imobiliária não lê o contrato do corretor dele.
+- Diferenças em relação ao protótipo: sem o número de páginas (o app não lê o PDF; mostra nome, tamanho e data); pré-visualização embutida só no site, se o Supabase permitir, e "Abrir" no celular; a tela de venda só fala em avisos depois da Etapa 10.
 
 ## Decisões tomadas em 05/11/2026 (testes de uso)
 
@@ -316,7 +338,7 @@ Estes pontos travam requisitos acima e precisam de resposta antes de virar códi
 
 **Negócio**
 
-- [ ] Comissão do PAUTA: qual % (da comissão do corretor ou do valor do imóvel)
+- [ ] Comissão do PAUTA: qual % (da comissão do corretor ou do valor do imóvel). Não trava a Etapa 9, mas precisa estar decidida antes do piloto, porque entra no texto do contrato
 - [ ] Preço da mensalidade (igual para imobiliária e corretor autônomo?)
 
 **Fluxo da venda**
