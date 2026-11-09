@@ -93,7 +93,10 @@ export function DecisaoDoContrato({
   }
 
   function aprovar() {
-    iniciar(async () => tratar(await chamarAcao(() => aprovarContrato(id, { valorFinal, comissao, comissaoPaga, conferido }))));
+    // Os três itens vão separados, na ordem de ITENS: o servidor confere cada um.
+    const [assinado, valorEImovel, clausulaDaComissao] = marcados;
+    const itens = { assinado, valorEImovel, clausulaDaComissao };
+    iniciar(async () => tratar(await chamarAcao(() => aprovarContrato(id, { valorFinal, comissao, comissaoPaga, itens }))));
   }
 
   function recusar() {

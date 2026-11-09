@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
+import { apagarContas, assinaturaDoContrato, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
 
 // Operações de contrato ao mesmo tempo (RNF05). O testar_rls.sql roda numa conexão só e
 // não enxerga a disputa; aqui cada chamada vai pela API, como duas telas fariam. Chamar o
@@ -98,12 +98,14 @@ async function subirPdf(proposta: string, corretor: (typeof corretores)[number])
   return caminho;
 }
 
-const registrar = (proposta: string, caminho: string, corretor: (typeof corretores)[number]) =>
-  corretor.cliente.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: caminho, p_nome: "contrato.pdf" });
+// A assinatura é calculada antes, para a disputa ser só a do registro.
+const registrar = (proposta: string, caminho: string, corretor: (typeof corretores)[number], p_assinatura: string) =>
+  corretor.cliente.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: caminho, p_nome: "contrato.pdf", p_assinatura });
 
 async function contratoEmAnalise(imovel: string, corretor: (typeof corretores)[number]) {
   const proposta = await propostaAceita(imovel, corretor);
-  const { data, error } = await registrar(proposta, await subirPdf(proposta, corretor), corretor);
+  const caminho = await subirPdf(proposta, corretor);
+  const { data, error } = await registrar(proposta, caminho, corretor, await assinaturaDoContrato(proposta, caminho, corretor.id));
   if (error) throw error;
   return { proposta, contrato: data as string };
 }
@@ -198,7 +200,8 @@ test("outro corretor registra o contrato enquanto o admin aprova: o dele não fi
     const { contrato } = await contratoEmAnalise(imovel, corretores[0]);
     const doBeto = await propostaAceita(imovel, corretores[1]);
     const caminho = await subirPdf(doBeto, corretores[1]);
-    const [aprovacao, registro] = await Promise.all([aprovar(contrato), registrar(doBeto, caminho, corretores[1])]);
+    const assinatura = await assinaturaDoContrato(doBeto, caminho, corretores[1].id);
+    const [aprovacao, registro] = await Promise.all([aprovar(contrato), registrar(doBeto, caminho, corretores[1], assinatura)]);
     expect(aprovacao.error).toBeNull();
     const fim = await situacao(imovel);
     expect(fim).toMatchObject({ status: "vendido", vendas: 1 });

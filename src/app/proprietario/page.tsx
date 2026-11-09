@@ -160,7 +160,8 @@ function CartaoDoImovel({
             {paraConfirmar} {paraConfirmar === 1 ? "visita" : "visitas"} para confirmar
           </span>
         )}
-        {emAberto > 0 && (
+        {/* No vendido, a proposta vencedora segue "aceita": não é mais uma proposta em aberto. */}
+        {emAberto > 0 && imovel.status !== "vendido" && (
           <span className="text-tiny font-bold text-mar">
             {emAberto} {emAberto === 1 ? "proposta" : "propostas"}
           </span>

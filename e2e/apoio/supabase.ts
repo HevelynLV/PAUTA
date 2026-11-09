@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 
@@ -160,4 +162,19 @@ export async function apagarContas(prefixo: string) {
     const { error: erro } = await admin.auth.admin.deleteUser(conta.id);
     if (erro) throw new Error(`apagarContas(${conta.email}): ${erro.message}`);
   }
+}
+
+// A assinatura que o servidor do app dá depois de conferir que o contrato é PDF (auditoria
+// da Etapa 9), para os testes que registram o contrato direto pela API. Mesma conta de
+// src/lib/assinaturaDoContrato.ts, com o eTag que o Storage devolve.
+export async function assinaturaDoContrato(proposta: string, caminho: string, corretor: string) {
+  const segredo = process.env.CONTRATO_PDF_SEGREDO;
+  if (!segredo) throw new Error("Falta CONTRATO_PDF_SEGREDO no .env.local");
+  const { data, error } = await clienteAdmin().storage.from("contratos").createSignedUrl(caminho, 60);
+  if (error) throw error;
+  const resposta = await fetch(data.signedUrl, { headers: { Range: "bytes=0-0" } });
+  await resposta.arrayBuffer();
+  const etag = resposta.headers.get("etag");
+  if (!etag) throw new Error("O Storage não devolveu o eTag");
+  return createHmac("sha256", segredo).update(`${proposta}:${caminho}:${corretor}:${etag}`).digest("hex");
 }

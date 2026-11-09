@@ -29,12 +29,15 @@ function atualizarTelas() {
 
 export async function aprovarContrato(
   id: string,
-  dados: { valorFinal: string; comissao: string; comissaoPaga: boolean; conferido: boolean },
+  dados: { valorFinal: string; comissao: string; comissaoPaga: boolean; itens: { assinado: boolean; valorEImovel: boolean; clausulaDaComissao: boolean } },
 ): Promise<ResultadoDaConferencia> {
   await exigirTipo("admin");
   if (!idValido(id)) return resultadoDoErro("contrato_nao_encontrado");
   // Os três itens da conferência são obrigatórios (decisão de 06/11/2026).
-  if (dados?.conferido !== true) return { erro: "Marque os três itens da conferência antes de aprovar." };
+  const itens = dados?.itens;
+  if (itens?.assinado !== true || itens.valorEImovel !== true || itens.clausulaDaComissao !== true) {
+    return { erro: "Marque os três itens da conferência antes de aprovar." };
+  }
 
   const valorFinal = typeof dados.valorFinal === "string" ? lerNumero(dados.valorFinal) : null;
   if (valorFinal === null || valorFinal <= 0) return resultadoDoErro("valor_invalido");

@@ -149,6 +149,11 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
 
+## Decisões tomadas em 09/11/2026 (auditoria da Etapa 9)
+
+- Só PDF é aceito como contrato, também para quem chama o banco direto pela API. O banco só registra o contrato com uma assinatura que o servidor do PAUTA dá depois de ler o começo do arquivo e ver que é PDF. A assinatura vale só para aquele arquivo (o eTag do Storage), aquela proposta e aquele corretor. O segredo da assinatura fica no Vault do Supabase e no ambiente do servidor, nunca no navegador, e sem usar a chave secreta do Supabase.
+- Cada proposta tem no máximo 3 arquivos de contrato enviados e ainda não registrados no Storage. A limpeza dos arquivos que sobram continua para a Etapa 13.
+
 ## Decisões tomadas em 06/11/2026 (plano da Etapa 9)
 
 - A % da comissão do PAUTA continua em aberto, mas não trava a Etapa 9: o app guarda só o valor em R$ que o admin lê no contrato (RF32), e a % fica no texto do contrato. Precisa estar decidida antes do piloto.

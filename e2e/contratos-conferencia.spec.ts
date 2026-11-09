@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page, type Request } from "@playwright/test";
 
-import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
+import { apagarContas, assinaturaDoContrato, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
 
 // Conferência do contrato pelo admin (RF26, RF32, RNF05): a fila, os três itens, aprovar
 // com valor final e comissão, recusar com motivo e a tela que ficou velha. O envio pelo
@@ -105,6 +105,7 @@ async function contratoEmAnalise(titulo: string, { outraAceita = false } = {}) {
     p_proposta: proposta,
     p_caminho: caminho,
     p_nome: "contrato-assinado.pdf",
+    p_assinatura: await assinaturaDoContrato(proposta, caminho, ids.ana),
   });
   if (erroContrato) throw erroContrato;
   return { imovel: imovel.id as string, proposta, outra, contrato: contrato as string };

@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
+import { apagarContas, assinaturaDoContrato, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
 
 // O que o proprietário vê do contrato e da venda (RF25, RF26, RNF08): o selo e o aviso em
 // Meus imóveis e na página do imóvel, "Ver contrato" na aba Propostas, sem "Desfazer
@@ -105,6 +105,7 @@ async function contratoEmAnalise(titulo: string, { outraAceita = false } = {}) {
     p_proposta: proposta,
     p_caminho: caminho,
     p_nome: "contrato-assinado.pdf",
+    p_assinatura: await assinaturaDoContrato(proposta, caminho, ids.ana),
   });
   if (erroContrato) throw erroContrato;
   return { imovel: imovel.id as string, proposta, outra, contrato: contrato as string };

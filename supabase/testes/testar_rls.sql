@@ -6724,8 +6724,25 @@ language sql
 as $$
   insert into storage.objects (bucket_id, name, owner_id, metadata)
   values ('contratos', pg_temp.caminho(p_proposta, p_n), p_dono::text,
-          jsonb_build_object('size', p_tamanho, 'mimetype', 'application/pdf'))
+          jsonb_build_object('size', p_tamanho, 'mimetype', 'application/pdf', 'eTag', '"teste-' || p_n || '"'))
   returning name;
+$$;
+
+-- A assinatura que o servidor do app daria depois de ver que o arquivo é PDF (auditoria
+-- da Etapa 9), feita para o dono do arquivo. Security definer: a função temporária é do
+-- dono da conexão, que lê o Vault mesmo depois do entrar_como. Sem o segredo no Vault,
+-- devolve null e os testes de envio falham, avisando que falta configurar.
+create or replace function pg_temp.assinatura(p_proposta uuid, p_caminho text, p_corretor uuid default null)
+returns text
+language sql
+security definer
+as $$
+  select encode(extensions.hmac(p_proposta::text || ':' || p_caminho || ':'
+                                || coalesce(p_corretor::text, o.owner_id) || ':' || (o.metadata ->> 'eTag'),
+                                (select ds.decrypted_secret from vault.decrypted_secrets ds where ds.name = 'pauta_contrato_pdf'),
+                                'sha256'), 'hex')
+  from storage.objects o
+  where o.bucket_id = 'contratos' and o.name = p_caminho;
 $$;
 
 -- Grava um contrato direto, sem passar pelas regras, para montar a situação do teste.
@@ -6748,8 +6765,9 @@ create or replace function pg_temp.enviar_pdf(p_proposta uuid, p_caminho text de
 returns text
 language sql
 as $$
-  select format('select public.enviar_contrato(%L, %L, %L)', p_proposta,
-                coalesce(p_caminho, pg_temp.caminho(p_proposta)), 'contrato.pdf');
+  select format('select public.enviar_contrato(%L, %L, %L, %L)', p_proposta,
+                coalesce(p_caminho, pg_temp.caminho(p_proposta)), 'contrato.pdf',
+                coalesce(pg_temp.assinatura(p_proposta, coalesce(p_caminho, pg_temp.caminho(p_proposta))), 'sem-arquivo'));
 $$;
 
 create or replace function pg_temp.aprovar(p_contrato uuid, p_valor text default '450000', p_comissao text default '9000')
@@ -6774,7 +6792,7 @@ do $$ declare v text; im uuid; p uuid; c uuid; a text; begin
     p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
     a := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1, 123456);
     perform pg_temp.entrar_como(pg_temp.u(31));
-    c := public.enviar_contrato(p, a, E'  contrato\n final.pdf  ');
+    c := public.enviar_contrato(p, a, E'  contrato\n final.pdf  ', pg_temp.assinatura(p, a));
     select status || ' / ' || nome_arquivo || ' / ' || tamanho_bytes || ' / ' || (enviado_por = pg_temp.u(31))
            || ' / ' || (imovel_id = im) || ' / ' || (respondido_em is null)
     into v from public.contratos where id = c;
@@ -6867,7 +6885,7 @@ do $$ declare v text; x text; im uuid; p uuid; c uuid; begin
     perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 2);
     perform pg_temp.criar_admin(pg_temp.u(9));
     perform pg_temp.entrar_como(pg_temp.u(31));
-    c := public.enviar_contrato(p, pg_temp.caminho(p, 1), 'a.pdf');
+    c := public.enviar_contrato(p, pg_temp.caminho(p, 1), 'a.pdf', pg_temp.assinatura(p, pg_temp.caminho(p, 1)));
     v := pg_temp.tentar(pg_temp.enviar_pdf(p, pg_temp.caminho(p, 2)));
     perform pg_temp.entrar_como(pg_temp.u(9));
     perform public.recusar_contrato(c, 'Falta assinatura');
@@ -7460,6 +7478,134 @@ do $$ declare v text; begin
   insert into resultado (teste, esperado, obtido)
   values ('Enviar e recusar contrato travam o perfil, para disputar com remover_corretor',
           'enviar_contrato true / recusar_contrato true', v);
+end $$;
+
+
+-- Auditoria da Etapa 9 ------------------------------------------------
+
+do $$ declare v text; begin
+  -- O segredo é gerado com 64 caracteres (README). Curto demais costuma ser o exemplo
+  -- copiado sem trocar: aí o servidor e o banco não chegam à mesma assinatura.
+  select case when coalesce(max(decrypted_secret), '') = '' then 'falta'
+              when max(length(decrypted_secret)) < 32 then 'curto demais'
+              else 'existe' end into v
+  from vault.decrypted_secrets where name = 'pauta_contrato_pdf';
+  insert into resultado (teste, esperado, obtido)
+  values ('O segredo pauta_contrato_pdf está no Vault, com o valor do .env.local (sem ele, nenhum contrato é registrado)', 'existe', v);
+end $$;
+
+-- Só o servidor do app, depois de ler o arquivo, sabe assinar: sem a assinatura certa,
+-- nem o próprio corretor registra o arquivo pela API.
+do $$ declare v text; im uuid; p uuid; a text; b text; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    a := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);
+    b := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 2);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, null)', p, a, 'x.pdf'));
+    v := v || ' / ' || pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', repeat('0', 64)));
+    v := v || ' / ' || pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', pg_temp.assinatura(p, b)));
+    v := v || ' / ' || pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', pg_temp.assinatura(p, a, pg_temp.u(32))));
+    v := v || ' / ' || (select string_agg(pg_get_function_identity_arguments(f.oid), '; ')
+                        from pg_proc f join pg_namespace ns on ns.oid = f.pronamespace
+                        where ns.nspname = 'public' and f.proname = 'enviar_contrato');
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar_pdf(p, a));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Contrato só com a assinatura do servidor: sem, inventada, de outro arquivo ou de outro corretor é recusado',
+          'bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / bloqueado (P0001) arquivo_invalido / p_proposta uuid, p_caminho text, p_nome text, p_assinatura text / permitido', v);
+end $$;
+
+-- O eTag muda quando o conteúdo muda: a assinatura de antes não serve para o arquivo trocado.
+do $$ declare v text; im uuid; p uuid; a text; x text; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    a := pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);
+    x := pg_temp.assinatura(p, a);
+    update storage.objects set metadata = metadata || '{"eTag": "\"outro\""}' where bucket_id = 'contratos' and name = a;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(format('select public.enviar_contrato(%L, %L, %L, %L)', p, a, 'x.pdf', x));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Arquivo trocado depois da conferência não é registrado com a assinatura antiga', 'bloqueado (P0001) arquivo_invalido', v);
+end $$;
+
+do $$ declare v text; im uuid; p uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 1);
+    perform pg_temp.arquivo_de_contrato(p, pg_temp.u(31), 2);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(p, 3), pg_temp.u(31)));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.guardar_arquivo(pg_temp.caminho(p, 4), pg_temp.u(31)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Bucket: no máximo 3 arquivos sem registro por proposta', 'permitido / bloqueado (42501)', v);
+end $$;
+
+-- O corretor que perdeu a venda continua lendo o próprio contrato, recusado na venda (RNF08).
+do $$ declare v text; im uuid; p uuid; q uuid; c uuid; d uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    c := pg_temp.criar_contrato(p);
+    d := pg_temp.criar_contrato(q);
+    perform pg_temp.arquivo_de_contrato(q, pg_temp.u(32));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.aprovar_contrato(c, 450000, 9000);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    select status || ' / ' || motivo_recusa into v from public.contratos where id = d;
+    v := v || ' / ' || public.pode_ler_contrato(pg_temp.caminho(q))
+           || ' / ' || (select count(*) from storage.objects where bucket_id = 'contratos' and name = pg_temp.caminho(q));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Quem perdeu a venda lê o próprio contrato recusado e o arquivo dele',
+          'recusado / Imóvel vendido por outra proposta / true / 1', v);
+end $$;
+
+-- Aceita de novo depois de um contrato recusado: o motivo antigo some das duas telas; o
+-- contrato recusado depois do aceite continua aparecendo.
+do $$ declare v text; im uuid; p uuid; q uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    perform pg_temp.criar_contrato(p, 'recusado');
+    perform pg_temp.criar_contrato(q, 'recusado');
+    update public.contratos set enviado_em = now() - interval '2 hours' where proposta_id in (p, q);
+    update public.propostas set respondida_em = now() - interval '1 hour' where id = p;
+    update public.propostas set respondida_em = now() - interval '3 hours' where id = q;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    select coalesce(contrato_status::text, 'nenhum') into v from public.minhas_propostas(im);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := v || ' / ' || (select coalesce(contrato_status::text, 'nenhum') from public.minhas_propostas(im));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || (select string_agg(coalesce(contrato_status::text, 'nenhum'), ', ' order by respondida_em desc)
+                        from public.propostas_recebidas(im));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Contrato recusado antes do aceite atual não aparece; o recusado depois do aceite aparece',
+          'nenhum / recusado / nenhum, recusado', v);
 end $$;
 
 -- ---------------------------------------------------------------

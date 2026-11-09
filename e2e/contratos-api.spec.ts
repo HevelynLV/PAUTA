@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
+import { apagarContas, assinaturaDoContrato, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
 
 // O bucket de contratos pela API de verdade (RF25, RNF08), com arquivos de verdade: o
 // testar_rls.sql só grava linhas em storage.objects, sem passar pelo Storage. Não depende
@@ -21,6 +21,7 @@ let dono: Sessao;
 let donoId: string;
 let ana: Sessao;
 let anaId: string;
+let betoId: string;
 let beto: Sessao;
 let adm: Sessao;
 let tipo: number;
@@ -39,7 +40,7 @@ test.beforeAll(async () => {
   anaId = await criarConta(email("ana"), { tipo: "autonomo", nome: "Ana", telefone: "48999990071", creci: `${unico()}-F` });
   await mudarAssinatura(anaId, "ativo");
   ana = (await entrarComo(email("ana"))).cliente;
-  const betoId = await criarConta(email("beto"), { tipo: "autonomo", nome: "Beto", telefone: "48999990072", creci: `${unico()}-F` });
+  betoId = await criarConta(email("beto"), { tipo: "autonomo", nome: "Beto", telefone: "48999990072", creci: `${unico()}-F` });
   await mudarAssinatura(betoId, "ativo");
   beto = (await entrarComo(email("beto"))).cliente;
   const admId = await criarConta(email("adm"), { tipo: "proprietario", nome: "Admin", telefone: "48999990073" });
@@ -101,7 +102,8 @@ async function contratoEnviado(proposta: string) {
   const caminho = novoCaminho(proposta);
   const envio = await enviarArquivo(ana, caminho);
   expect(envio.error).toBeNull();
-  const { data, error } = await ana.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: caminho, p_nome: "contrato.pdf" });
+  const p_assinatura = await assinaturaDoContrato(proposta, caminho, anaId);
+  const { data, error } = await ana.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: caminho, p_nome: "contrato.pdf", p_assinatura });
   expect(error).toBeNull();
   return { caminho, id: data as string };
 }
@@ -136,7 +138,8 @@ test("outro corretor não envia na pasta da proposta e não registra o arquivo d
   const caminho = novoCaminho(proposta);
   expect((await enviarArquivo(beto, caminho)).error).not.toBeNull();
   expect((await enviarArquivo(ana, caminho)).error).toBeNull();
-  const { error } = await beto.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: caminho, p_nome: "x.pdf" });
+  const p_assinatura = await assinaturaDoContrato(proposta, caminho, anaId);
+  const { error } = await beto.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: caminho, p_nome: "x.pdf", p_assinatura });
   expect(error?.hint).toBe("proposta_nao_encontrada");
 });
 
@@ -191,4 +194,36 @@ test("aprovar pela API vende o imóvel, e a limpeza dos testes consegue apagar t
   expect(resumo?.[0]).toMatchObject({ venda_valor: 7_100_000 });
   expect(resumo?.[0]).not.toHaveProperty("comissao_valor");
   expect((await dono.from("vendas").select("id")).data).toEqual([]);
+});
+
+// Auditoria da Etapa 9: só o servidor do app, depois de ler o arquivo, sabe assinar.
+test("sem a assinatura do servidor, nem um PDF de verdade vira contrato pela API", async () => {
+  const proposta = await propostaAceita();
+  const falso = novoCaminho(proposta);
+  expect((await enviarArquivo(ana, falso, new TextEncoder().encode("isto não é um pdf"))).error).toBeNull();
+  const semAssinatura = await ana.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: falso, p_nome: "x.pdf", p_assinatura: "" });
+  expect(semAssinatura.error?.hint).toBe("arquivo_invalido");
+  const inventada = await ana.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: falso, p_nome: "x.pdf", p_assinatura: "0".repeat(64) });
+  expect(inventada.error?.hint).toBe("arquivo_invalido");
+  // A versão antiga, sem o campo da assinatura, não existe mais.
+  const antiga = await ana.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: falso, p_nome: "x.pdf" } as never);
+  expect(antiga.error).not.toBeNull();
+
+  // A assinatura de um arquivo não serve para outro, nem para outro corretor.
+  const certo = novoCaminho(proposta);
+  expect((await enviarArquivo(ana, certo)).error).toBeNull();
+  const deOutro = await assinaturaDoContrato(proposta, certo, betoId);
+  const trocada = await ana.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: certo, p_nome: "x.pdf", p_assinatura: deOutro });
+  expect(trocada.error?.hint).toBe("arquivo_invalido");
+  const doCerto = await assinaturaDoContrato(proposta, certo, anaId);
+  const emOutroArquivo = await ana.rpc("enviar_contrato", { p_proposta: proposta, p_caminho: falso, p_nome: "x.pdf", p_assinatura: doCerto });
+  expect(emOutroArquivo.error?.hint).toBe("arquivo_invalido");
+  expect((await clienteAdmin().from("contratos").select("id").eq("proposta_id", proposta)).data).toEqual([]);
+});
+
+test("o bucket aceita no máximo 3 arquivos sem registro por proposta", async () => {
+  const proposta = await propostaAceita();
+  for (let i = 0; i < 3; i++) expect((await enviarArquivo(ana, novoCaminho(proposta))).error).toBeNull();
+  expect((await enviarArquivo(ana, novoCaminho(proposta))).error).not.toBeNull();
+  expect(((await clienteAdmin().storage.from(BUCKET).list(proposta)).data ?? []).length).toBe(3);
 });
