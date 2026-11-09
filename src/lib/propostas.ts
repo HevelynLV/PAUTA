@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { StatusContrato } from "@/lib/contrato";
 import { idDeImovelValido } from "@/lib/imovel";
 import type { FormaPagamento, StatusProposta } from "@/lib/proposta";
 import { criarClienteServidor } from "@/lib/supabase/server";
@@ -23,6 +24,11 @@ export type PropostaDoCorretor = {
   status: StatusProposta;
   criada_em: string;
   respondida_em: string | null;
+  // O contrato mais recente desta proposta, se houver.
+  contrato_id: string | null;
+  contrato_status: StatusContrato | null;
+  contrato_motivo: string | null;
+  contrato_enviado_em: string | null;
 };
 
 export type PropostaRecebida = {
@@ -41,6 +47,8 @@ export type PropostaRecebida = {
   creci: string;
   telefone: string;
   email: string;
+  contrato_id: string | null;
+  contrato_status: StatusContrato | null;
 };
 
 // As propostas do corretor logado, de todos os imóveis ou de um só, a mais nova primeiro.

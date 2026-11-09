@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { BotaoVerContrato } from "@/components/contrato/BotaoVerContrato";
+import { EnviarContrato } from "@/components/contrato/EnviarContrato";
 import { BotaoRetirarProposta } from "@/components/proposta/BotaoRetirarProposta";
 import { Cartao } from "@/components/ui/Cartao";
 import { classesBotao } from "@/components/ui/Botao";
@@ -10,7 +12,7 @@ import { BotaoCancelarVisita } from "@/components/visita/BotaoCancelarVisita";
 import { exigirTipo, TIPOS_ASSINANTE } from "@/lib/auth";
 import { formatarHorario, seloDaVisita } from "@/lib/horariosDeVisita";
 import { formatarData, formatarPreco } from "@/lib/imovel";
-import { propostaEmAberto, rotuloDaForma, seloDaProposta } from "@/lib/proposta";
+import { propostaEmAberto, rotuloDaForma, seloDaNegociacao } from "@/lib/proposta";
 import { minhasPropostas, type PropostaDoCorretor } from "@/lib/propostas";
 import { minhasVisitas, type VisitaDoCorretor } from "@/lib/visitas";
 
@@ -22,7 +24,7 @@ export const metadata: Metadata = { title: "Negociações" };
 // e Visitas na URL. Propostas: a mais nova no topo; no celular são cartões, no site as
 // mesmas linhas viram a tabela do protótipo. Visitas: primeiro as por vir, a mais
 // próxima no topo; depois as anteriores, a mais recente no topo.
-// "Enviar contrato assinado" entra na Etapa 9.
+// O contrato (Etapa 9) é o próximo passo da proposta aceita: enviar, acompanhar e reenviar.
 export default function Negociacoes({ searchParams }: PageProps<"/assinante/negociacoes">) {
   return (
     <Suspense fallback={<p className="px-5 pt-[22px] text-ink2">Carregando…</p>}>
@@ -99,7 +101,7 @@ function Vazio({ titulo, texto }: { titulo: string; texto: string }) {
   );
 }
 
-const COLUNAS = "md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_170px_170px]";
+const COLUNAS = "md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_170px_200px]";
 
 function TabelaDePropostas({ propostas }: { propostas: PropostaDoCorretor[] }) {
   return (
@@ -125,9 +127,13 @@ function TabelaDePropostas({ propostas }: { propostas: PropostaDoCorretor[] }) {
 }
 
 function LinhaDaProposta({ proposta, maisRecente }: { proposta: PropostaDoCorretor; maisRecente: boolean }) {
-  const selo = seloDaProposta(proposta.status, "corretor");
+  const selo = seloDaNegociacao(proposta.status, proposta.contrato_status);
   const valor = formatarPreco(proposta.valor);
   const aberta = propostaEmAberto(proposta.status);
+  const aceita = proposta.status === "aceita";
+  // Só a proposta aceita olha o contrato: desfeito o aceite, o antigo não vale mais.
+  const contrato = aceita ? proposta.contrato_status : null;
+  const aceitaEm = proposta.respondida_em ? formatarData(proposta.respondida_em) : "";
 
   return (
     <li
@@ -161,19 +167,41 @@ function LinhaDaProposta({ proposta, maisRecente }: { proposta: PropostaDoCorret
         </span>
       </div>
       <div className="col-span-2 flex flex-col gap-1.5 md:col-span-1 md:col-start-4 md:row-start-1 md:items-end md:text-right">
-        {proposta.status === "aceita" && proposta.respondida_em && (
+        {aceita && !contrato && proposta.respondida_em && (
           <span className="text-tiny text-ink2">
-            Aceita pelo proprietário em {formatarData(proposta.respondida_em)}. O contrato é assinado fora do PAUTA.
+            Aceita pelo proprietário em {aceitaEm}.{proposta.no_catalogo && " Colha as assinaturas fora do PAUTA e envie o PDF."}
           </span>
         )}
+        {contrato === "em_analise" && proposta.contrato_enviado_em && (
+          <span className="text-tiny text-ink2">Em análise pela equipe. Enviado em {formatarData(proposta.contrato_enviado_em)}.</span>
+        )}
+        {contrato === "recusado" && (
+          <span className="text-tiny text-erro-texto [overflow-wrap:anywhere]">Motivo do admin: {proposta.contrato_motivo}</span>
+        )}
+        {contrato === "aprovado" && <span className="text-tiny text-ink2">Contrato aprovado pela equipe.</span>}
         {!aberta && maisRecente && proposta.no_catalogo && (
           <Link href={`/assinante/imoveis/${proposta.imovel_id}?proposta=1`} className="text-small font-bold text-mar">
             Enviar outra proposta
           </Link>
         )}
-        {aberta && proposta.no_catalogo && (
+        {/* Fica montada mesmo sem o botão: é ela que mostra "Contrato em análise" depois do envio. */}
+        {aceita && proposta.no_catalogo && (
+          <EnviarContrato
+            propostaId={proposta.id}
+            titulo={proposta.titulo}
+            resumo={`${valor} · ${rotuloDaForma(proposta.forma_pagamento).toLowerCase()} · aceita em ${aceitaEm}`}
+            mostrarBotao={contrato === null || contrato === "recusado"}
+            reenvio={contrato === "recusado"}
+          />
+        )}
+        {contrato && proposta.contrato_id && (
+          <div className="flex flex-col gap-1 self-start md:items-end md:self-end">
+            <BotaoVerContrato id={proposta.contrato_id} />
+          </div>
+        )}
+        {aberta && proposta.no_catalogo && contrato !== "em_analise" && (
           <div className="self-start md:self-end">
-            <BotaoRetirarProposta id={proposta.id} valor={valor} aceita={proposta.status === "aceita"} />
+            <BotaoRetirarProposta id={proposta.id} valor={valor} aceita={aceita} />
           </div>
         )}
       </div>

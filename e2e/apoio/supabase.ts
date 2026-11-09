@@ -96,6 +96,32 @@ export async function entrarComo(email: string, senha = SENHA_TESTE) {
   };
 }
 
+// Vendas e contratos seguram a proposta, o imóvel e a conta (on delete restrict), e os
+// PDFs não saem sozinhos: tudo isso vai antes, inclusive arquivo enviado sem registro.
+async function apagarContratos(contas: string[]) {
+  if (contas.length === 0) return;
+  const admin = clienteAdmin();
+  const { data: imoveis } = await admin.from("imoveis").select("id").in("proprietario_id", contas);
+  const imovelIds = (imoveis ?? []).map((imovel) => imovel.id);
+  const { data: recebidas } = await admin.from("propostas").select("id").in("imovel_id", imovelIds).limit(1000);
+  const { data: enviadas } = await admin.from("propostas").select("id").in("corretor_id", contas).limit(1000);
+  const ids = [...new Set([...(recebidas ?? []), ...(enviadas ?? [])].map((proposta) => proposta.id))];
+  if (ids.length === 0) return;
+
+  const { data: contratos } = await admin.from("contratos").select("id").in("proposta_id", ids);
+  const contratoIds = (contratos ?? []).map((contrato) => contrato.id);
+  if (contratoIds.length > 0) {
+    const { error: erroVendas } = await admin.from("vendas").delete().in("contrato_id", contratoIds);
+    if (erroVendas) throw new Error(`apagarContratos, vendas: ${erroVendas.message}`);
+    const { error: erroContratos } = await admin.from("contratos").delete().in("id", contratoIds);
+    if (erroContratos) throw new Error(`apagarContratos, contratos: ${erroContratos.message}`);
+  }
+  for (const id of ids) {
+    const { data: arquivos } = await admin.storage.from("contratos").list(id, { limit: 100 });
+    if (arquivos?.length) await admin.storage.from("contratos").remove(arquivos.map((arquivo) => `${id}/${arquivo.name}`));
+  }
+}
+
 // Apaga as contas de teste cujo e-mail começa com o prefixo (os corretores
 // primeiro). Assinante só pode
 // ser excluído pendente (RF16): antes, volta o status para pendente. Os imóveis
@@ -115,6 +141,7 @@ export async function apagarContas(prefixo: string) {
     .in("id", contas.map((conta) => conta.id));
   const ehCorretor = new Set((corretores ?? []).map((perfil) => perfil.id));
   contas.sort((a, b) => Number(ehCorretor.has(b.id)) - Number(ehCorretor.has(a.id)));
+  await apagarContratos(contas.map((conta) => conta.id));
   for (const conta of contas) {
     // Os arquivos das fotos não saem sozinhos com o imóvel: apaga a pasta de cada um.
     const { data: imoveis } = await admin.from("imoveis").select("id").eq("proprietario_id", conta.id);
