@@ -8,7 +8,7 @@ import { apagarContas, clienteAdmin, criarConta, entrarComo } from "./apoio/supa
 
 const PREFIXO = "e2e-lista-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const BALDE = "fotos-imoveis";
 
 type Conta = "dona" | "outra";

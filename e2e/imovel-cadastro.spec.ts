@@ -8,7 +8,7 @@ import { apagarContas, clienteAdmin, cookiesDeSessao, criarConta } from "./apoio
 
 const PREFIXO = "e2e-imovel-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 
 type Conta = "dona" | "outra";
 const sessoes = {} as Record<Conta, Awaited<ReturnType<typeof cookiesDeSessao>>>;

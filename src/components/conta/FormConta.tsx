@@ -45,7 +45,7 @@ export function FormConta({
         className="[&_input]:bg-bg [&_input]:text-ink2"
       />
       <CampoTelefone
-        dica="Use um celular: os avisos chegam por WhatsApp neste número."
+        dica="Use um celular: é o número dos avisos de WhatsApp."
         defaultValue={telefone}
         erro={estado.erros?.telefone}
       />

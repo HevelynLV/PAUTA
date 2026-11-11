@@ -576,7 +576,7 @@ Depois confira o "Pronto quando" da Etapa 9, item por item. Se estiver tudo cert
 
 ## Etapa 10 — Avisos
 
-**Pronto quando:** cada evento do fluxo gera aviso na lista do app e no WhatsApp.
+**Pronto quando:** cada evento do fluxo gera aviso na lista do app e entra na fila do WhatsApp de quem aceitou, com o envio à Meta testado por simulação (a entrega real num celular brasileiro fica para o piloto, decidido em 10/11/2026).
 **Telas do protótipo:** CorAvisos, ProAvisos, SiteCorAvisos e SiteProAvisos.
 **Decidir antes:** nada: o provedor é a Meta direto (Cloud API), com o número de teste gratuito até o piloto (decidido em 09/11/2026).
 

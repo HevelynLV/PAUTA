@@ -10,7 +10,7 @@ import { apagarContas, clienteAdmin, contaPorEmail, criarConta, entrarComo, torn
 // imobiliária.
 
 const PREFIXO = "e2e-autonomo-";
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const unico = () => String(Math.floor(1_000_000 + Math.random() * 8_999_999));
 
 let cookiesDoAdmin: Awaited<ReturnType<typeof entrarComo>>["cookies"];

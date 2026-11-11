@@ -6,6 +6,7 @@ import { exigirTipo } from "@/lib/auth";
 import { mensagemDoErroDeVisita } from "@/lib/horariosDeVisita";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Respostas do proprietário às visitas (RF22). O banco confere que a visita é de um
 // imóvel dele e, ao confirmar, recusa os outros pedidos do mesmo horário na mesma
@@ -19,6 +20,7 @@ async function responder(funcao: "confirmar_visita" | "recusar_visita" | "cancel
   const { error } = await supabase.rpc(funcao, { p_visita: id });
   if (error) return { erro: mensagemDoErroDeVisita(error.hint) };
 
+  avisarPeloWhatsApp();
   revalidatePath("/proprietario/visitas");
   revalidatePath("/proprietario");
   revalidatePath("/proprietario/imoveis/[id]", "page");

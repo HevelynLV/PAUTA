@@ -6,6 +6,7 @@ import { exigirTipo } from "@/lib/auth";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Ações do admin sobre assinantes (RF15, RF16). Ativar e bloquear usam a sessão
 // do admin: o RLS só deixa o admin mudar a linha, e o gatilho
@@ -35,6 +36,7 @@ export async function ativarAssinante(id: string): Promise<ResultadoDaAcao> {
     .select("id");
   if (error) return { erro: "Não foi possível ativar. Tente de novo." };
   if (data.length === 0) return { erro: "Este assinante não está mais pendente. Recarregue a página." };
+  avisarPeloWhatsApp();
   atualizarTelas();
   return {};
 }

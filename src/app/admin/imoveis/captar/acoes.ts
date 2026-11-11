@@ -6,6 +6,7 @@ import { exigirTipo } from "@/lib/auth";
 import { formatarTelefone } from "@/lib/conta";
 import { BUCKET_FOTOS, idDeImovelValido, lerDadosDoImovel, type CampoImovel } from "@/lib/imovel";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Captação pelo admin (RF08, decisões de 27/10/2026): o dono já tem conta; o admin
 // procura, cadastra o imóvel para ele e envia as fotos. O imóvel fica "captado",
@@ -67,6 +68,7 @@ export async function captarImovel(_anterior: EstadoCaptacao, formData: FormData
     return { erros: {}, valores, erroGeral: "Não foi possível captar o imóvel. Confira os dados e tente de novo." };
   }
 
+  avisarPeloWhatsApp();
   redirect(`/admin/imoveis/captar/${data as string}`);
 }
 

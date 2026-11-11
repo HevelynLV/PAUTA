@@ -27,7 +27,7 @@ async function Conteudo() {
   const usuario = await exigirTipo(TIPOS_ASSINANTE);
   const supabase = await criarClienteServidor();
   const [{ data: perfil }, { data: assinante }, corretores] = await Promise.all([
-    supabase.from("perfis").select("telefone").eq("id", usuario.id).maybeSingle(),
+    supabase.from("perfis").select("telefone, whatsapp_aceito").eq("id", usuario.id).maybeSingle(),
     // RLS: o corretor convidado lê a assinatura da imobiliária dele.
     supabase.from("assinantes").select("nome").eq("id", usuario.assinanteId!).maybeSingle(),
     usuario.tipo === "imobiliaria" ? corretoresAtivos(usuario.assinanteId!) : Promise.resolve(0),
@@ -46,6 +46,7 @@ async function Conteudo() {
       papel={papel}
       email={usuario.email}
       telefone={formatarTelefone(perfil?.telefone ?? "")}
+      whatsappAceito={perfil?.whatsapp_aceito === true}
       acao={salvarContaAssinante}
     >
       {usuario.tipo === "imobiliaria" && (

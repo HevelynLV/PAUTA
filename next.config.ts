@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Os testes e2e contra o build de produção (PAUTA_PROD=1, playwright.config.ts) usam
+  // a pasta .next-e2e, para não sobrescrever o .next de outro next start aberto.
+  distDir: process.env.PAUTA_DIST_DIR || ".next",
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,

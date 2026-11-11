@@ -11,7 +11,7 @@ import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura } f
 
 const PREFIXO = "e2e-catalogo-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const BALDE = "fotos-imoveis";
 const FAIXA = "preco_min=7770000&preco_max=7770999";
 const FAIXA_PAGINAS = "preco_min=7771000&preco_max=7771999";

@@ -37,7 +37,7 @@ async function Conteudo({ params }: { params: Promise<{ id: string }> }) {
           </span>
           <h1 className="font-display text-t1 font-bold leading-[1.1] tracking-[-0.02em]">Imóvel enviado</h1>
           <p className="text-ink2">
-            A equipe PAUTA vai conferir os dados e as fotos. Você recebe um aviso no WhatsApp e no app quando ele for aprovado.
+            A equipe PAUTA vai conferir os dados e as fotos. Você recebe um aviso no app quando ele for aprovado (e no WhatsApp, se tiver ligado em Minha conta).
           </p>
         </div>
 

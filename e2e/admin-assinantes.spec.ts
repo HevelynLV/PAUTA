@@ -11,7 +11,7 @@ import { apagarContas, clienteAdmin, contaPorEmail, criarConta, entrarComo, muda
 // liberando o CRECI. Assinante que já foi ativado não é excluído.
 
 const PREFIXO = "e2e-assinantes-";
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 
 // E-mail e CRECI únicos por teste e por tela (celular e computador rodam os dois).
 const unico = () => String(Math.floor(1_000_000 + Math.random() * 8_999_999));

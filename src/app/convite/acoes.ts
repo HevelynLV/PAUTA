@@ -6,6 +6,7 @@ import { usuarioAtual } from "@/lib/auth";
 import { CODIGO_DO_CONVITE, textoDaSituacao } from "@/lib/convite";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { emailValido, ERRO_TELEFONE, limparTelefone, nomeValido, senhaValida, telefoneValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Aceitar o convite: o corretor cria a conta e já entra vinculado e ativo (RF05).
 // Exceção do exigirTipo() no CLAUDE.md: quem aceita ainda não tem conta.
@@ -21,13 +22,18 @@ export type CampoConvite = "nome" | "email" | "telefone" | "senha";
 export type EstadoConvite = {
   erros: Partial<Record<CampoConvite, string>>;
   erroGeral?: string;
-  valores: Partial<Record<CampoConvite, string>>;
+  valores: Partial<Record<CampoConvite | "whatsapp", string>>;
 };
 
 export async function aceitarConvite(_anterior: EstadoConvite, formData: FormData): Promise<EstadoConvite> {
   const texto = (campo: string) => String(formData.get(campo) ?? "").trim();
   const codigo = texto("codigo");
-  const valores = { nome: texto("nome"), email: texto("email").toLowerCase(), telefone: texto("telefone") };
+  const valores = {
+    nome: texto("nome"),
+    email: texto("email").toLowerCase(),
+    telefone: texto("telefone"),
+    whatsapp: texto("whatsapp") === "sim" ? "sim" : "",
+  };
   const senha = String(formData.get("senha") ?? "");
   const telefone = limparTelefone(valores.telefone);
 
@@ -54,7 +60,16 @@ export async function aceitarConvite(_anterior: EstadoConvite, formData: FormDat
   const { error } = await supabase.auth.signUp({
     email: valores.email,
     password: senha,
-    options: { data: { tipo: "corretor", nome: valores.nome, telefone, convite: codigo } },
+    options: {
+      data: {
+        tipo: "corretor",
+        nome: valores.nome,
+        telefone,
+        convite: codigo,
+        // Consentimento do WhatsApp (Etapa 10): o banco copia para o perfil e apaga a chave.
+        ...(valores.whatsapp === "sim" && { whatsapp: "true" }),
+      },
+    },
   });
 
   if (error) {
@@ -80,6 +95,8 @@ export async function aceitarConvite(_anterior: EstadoConvite, formData: FormDat
   }
 
   // Sem sessão (confirmação de e-mail ligada, Etapa 13), o /assinante manda para /entrar.
+  // O responsável da imobiliária recebe o aviso "corretor entrou".
+  avisarPeloWhatsApp();
   redirect("/assinante");
 }
 

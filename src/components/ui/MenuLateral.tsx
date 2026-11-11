@@ -37,7 +37,7 @@ export function MenuLateral({ itens, rotulo }: { itens: ItemMenu[]; rotulo: stri
             {item.rotulo}
             {item.contador ? (
               <span className="ml-auto flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-erro px-1.5 text-[11px] font-bold text-white">
-                {item.contador}
+                {item.contador > 99 ? "99+" : item.contador}
               </span>
             ) : null}
           </Link>

@@ -3,6 +3,7 @@
 import { exigirTipo } from "@/lib/auth";
 import { idDeImovelValido } from "@/lib/imovel";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Aprovar ou reprovar imóvel do proprietário (RF14). Quem decide de verdade são
 // as funções do banco aprovar_imovel() e reprovar_imovel(), que conferem de novo
@@ -31,6 +32,7 @@ export async function aprovarImovel(id: string, versao: number): Promise<Resulta
     return { erro: "Não foi possível aprovar. Tente de novo." };
   }
 
+  avisarPeloWhatsApp();
   const { data } = await supabase.from("imoveis").select("exclusividade_fim").eq("id", id).single();
   return { aprovado: { exclusividadeFim: data?.exclusividade_fim ?? "" } };
 }
@@ -51,5 +53,6 @@ export async function reprovarImovel(id: string, motivo: string): Promise<Result
     }
     return { erro: "Não foi possível reprovar. Tente de novo." };
   }
+  avisarPeloWhatsApp();
   return { reprovado: true };
 }

@@ -7,6 +7,7 @@ import { idDeImovelValido, lerNumero } from "@/lib/imovel";
 import { formaValida, mensagemDoErroDeProposta, TAMANHO_DAS_CONDICOES, TAMANHO_DO_COMPRADOR } from "@/lib/proposta";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Propostas do lado do corretor (RF23). O banco confere acesso, catálogo e a regra de
 // uma proposta em aberto (enviar_proposta e cancelar_proposta). A conferência daqui
@@ -49,6 +50,7 @@ export async function enviarProposta(proposta: {
   });
   if (error) return { erro: mensagemDoErroDeProposta(error.hint) };
 
+  avisarPeloWhatsApp();
   atualizarTelas();
   return {};
 }
@@ -61,6 +63,7 @@ export async function retirarProposta(id: string): Promise<{ erro?: string }> {
   const { error } = await supabase.rpc("cancelar_proposta", { p_proposta: id });
   if (error) return { erro: mensagemDoErroDeProposta(error.hint) };
 
+  avisarPeloWhatsApp();
   atualizarTelas();
   return {};
 }

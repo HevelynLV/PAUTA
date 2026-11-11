@@ -49,7 +49,7 @@ export function MenuInferior({ itens, rotulo }: { itens: ItemMenu[]; rotulo: str
             {item.rotulo}
             {item.contador ? (
               <span className="absolute right-[calc(50%-20px)] top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-erro px-1 text-[10px] font-bold text-white">
-                {item.contador}
+                {item.contador > 99 ? "99+" : item.contador}
               </span>
             ) : null}
           </Link>

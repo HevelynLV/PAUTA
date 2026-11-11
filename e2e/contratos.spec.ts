@@ -13,7 +13,7 @@ test.describe.configure({ timeout: 240_000 });
 
 const PREFIXO = "e2e-contrato-fluxo-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const unico = () => String(Math.floor(10_000 + Math.random() * 89_999));
 const PDF = Buffer.from("%PDF-1.7\nContrato de teste do PAUTA\n%%EOF\n");
 

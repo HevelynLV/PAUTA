@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { exigirTipo } from "@/lib/auth";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { emailValido, idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Ações da tela Equipe (RF05, passo 5.4), só do responsável pela imobiliária.
 // Quem decide de verdade é o banco: criar_convite() confere que a imobiliária
@@ -60,6 +61,7 @@ export async function removerCorretor(id: string): Promise<{ erro?: string }> {
   const supabase = await criarClienteServidor();
   const { error } = await supabase.rpc("remover_corretor", { p_corretor: id });
   if (error) return { erro: "Não foi possível remover. Recarregue a página e tente de novo." };
+  avisarPeloWhatsApp();
   revalidatePath("/assinante/equipe");
   return {};
 }

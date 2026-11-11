@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { apagarContas, assinaturaDoContrato, clienteAdmin, criarConta, entrarComo, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
+import { apagarContas, assinaturaDoContrato, clienteAdmin, criarConta, entrarComo, esquecerEnviosRecentes, mudarAssinatura, tornarAdmin } from "./apoio/supabase";
 
 // Operações de contrato ao mesmo tempo (RNF05). O testar_rls.sql roda numa conexão só e
 // não enxerga a disputa; aqui cada chamada vai pela API, como duas telas fariam. Chamar o
@@ -40,6 +40,8 @@ test.beforeAll(async () => {
   adm = (await entrarComo(email("adm"))).cliente;
 });
 
+// Os mesmos corretores enviam propostas em todas as rodadas: sem isto, passariam do limite de 10 por hora.
+test.afterEach(() => esquecerEnviosRecentes(corretores.map((c) => c.id)));
 test.afterAll(() => apagarContas(PREFIXO));
 
 async function criarImovel() {

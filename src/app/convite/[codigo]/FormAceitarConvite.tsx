@@ -2,6 +2,7 @@
 
 import { startTransition, useActionState } from "react";
 
+import { CaixaWhatsapp } from "@/components/conta/CaixaWhatsapp";
 import { Botao } from "@/components/ui/Botao";
 import { Campo } from "@/components/ui/Campo";
 import { CampoTelefone } from "@/components/ui/CampoTelefone";
@@ -58,7 +59,7 @@ export function FormAceitarConvite({ codigo, emailDoConvite }: { codigo: string;
         />
         <div className="grid gap-3.5 md:grid-cols-2 md:gap-4">
           <CampoTelefone
-            dica="Use um celular: os avisos chegam por WhatsApp neste número."
+            dica="Use um celular: os avisos de WhatsApp, se você quiser, chegam neste número."
             defaultValue={valores.telefone}
             erro={erros.telefone}
           />
@@ -70,6 +71,7 @@ export function FormAceitarConvite({ codigo, emailDoConvite }: { codigo: string;
             autoComplete="new-password"
             erro={erros.senha}
           />
+          <CaixaWhatsapp marcada={valores.whatsapp === "sim"} />
         </div>
 
         {estado.erroGeral && (

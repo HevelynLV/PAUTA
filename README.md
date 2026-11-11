@@ -77,10 +77,13 @@ Confira: `node -v`, `git --version` e `claude --version` respondem sem erro.
   | `SITE_URL` | Endereço do site, usado nos links dos e-mails de cadastro e de recuperação de senha. Sem barra no fim | Não vem do painel: em desenvolvimento é sempre `http://localhost:3000` |
   | `SUPABASE_SECRET_KEY` | Chave secreta, para os testes automáticos e para o "Excluir" de assinante pendente na tela do admin (só no servidor) | **Project Settings → API Keys → Secret keys → Add new secret key**, com o nome `testes-e2e-<seu nome>`. Copie o valor (`sb_secret_...`) |
   | `CONTRATO_PDF_SEGREDO` | Segredo com que o servidor assina o contrato depois de conferir que o arquivo é PDF. O banco confere a assinatura com o mesmo valor, guardado no Vault com o nome `pauta_contrato_pdf`; sem ele, nenhum contrato é registrado (só no servidor) | Não vem do painel. É o mesmo valor para as duas pessoas: peça a quem criou, por mensagem particular. Quem cria pela primeira vez gera com `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` e guarda o mesmo valor no Vault (veja o "Atenção" do ROADMAP de 09/11/2026) |
+  | `WHATSAPP_TOKEN` | Token da API do WhatsApp (Meta). O de teste vence em 24 h. Sem ele, o WhatsApp é pulado e o aviso no app é criado do mesmo jeito | Não vem do Supabase: painel da Meta, **developers.facebook.com → app → WhatsApp → Step 1. Try it out → Generate token** |
+  | `WHATSAPP_NUMERO_ID` | ID do número que envia (o de teste da Meta, +1 555, até o piloto) | Mesma tela da Meta: **Phone Number ID** |
+  | `WHATSAPP_FILA_SEGREDO` | Segredo com que o servidor pega a fila do WhatsApp (com os telefones). O banco confere com o mesmo valor, guardado no Vault com o nome `pauta_whatsapp_fila`. Igual para as duas pessoas: peça por mensagem particular | Não vem do painel: quem criou passa o valor |
 
   > ⚠️ **A secret key é pessoal.** Cada pessoa cria a sua; não compartilhe. Ela ignora todo o RLS: quem tem a chave lê e apaga qualquer dado do banco. Por isso ela **nunca** tem o prefixo `NEXT_PUBLIC_`, no app só é lida por `src/lib/supabase/admin.ts` (que tem `server-only` e só roda no servidor, depois de `exigirTipo("admin")`), nunca vai para a Vercel e **nunca vai para o GitHub** (o `.gitignore` ignora `.env*`). Se vazar, revogue-a no mesmo lugar onde criou. Desde o passo 5.2, em desenvolvimento o servidor do app usa esta chave pessoal para excluir assinante pendente com o usuário; sem ela, o "Excluir" da tela de assinantes dá erro. Na Vercel (Etapa 13) vai outra chave secreta, de produção, diferente das chaves pessoais (decisão de 22/10/2026).
 
-- [ ] As variáveis do Asaas e do WhatsApp entram aqui nas Etapas 10 e 11
+- [ ] As variáveis do Asaas entram aqui na Etapa 11. As do WhatsApp são opcionais: sem elas, só o WhatsApp é pulado (o número de teste da Meta não entrega para celulares do Brasil; a entrega real é conferida no piloto)
 - [ ] Sempre que criar ou mudar o `.env.local`, pare e rode de novo o `npm run dev`. O Next.js só lê esse arquivo quando o servidor inicia
 - [ ] Confira a conexão: rode `npm run dev` e abra http://localhost:3000/teste-conexao. As três linhas precisam aparecer com ✅ (essa página de teste existe até a Etapa 13)
 
@@ -139,7 +142,7 @@ O admin nunca é criado pelo cadastro do app.
 ### 8. Conferir que está tudo certo *(a partir da Etapa 3)*
 
 - [ ] `npm run dev` e abra http://localhost:3000: a página inicial do PAUTA aparece, e "Entrar" leva ao login
-- [ ] Em outro terminal, `npm run test:e2e`: todos os testes passam (alguns aparecem como "skipped" de propósito). Eles precisam da `SUPABASE_SECRET_KEY` no `.env.local` (passo 4), porque criam e apagam contas `e2e-…@exemplo.com`. Se aparecer erro de "rate limit", é o limite de logins do Supabase (cerca de 30 a cada 5 minutos): espere uns minutos e rode de novo. Para ver o relatório: `npx playwright show-report`
+- [ ] Em outro terminal, `npm run test:e2e`: todos os testes passam (alguns aparecem como "skipped" de propósito). Eles precisam da `SUPABASE_SECRET_KEY` no `.env.local` (passo 4), porque criam e apagam contas `e2e-…@exemplo.com`. Se aparecer erro de "rate limit", é o limite de logins do Supabase (cerca de 30 a cada 5 minutos): espere uns minutos e rode de novo. Para ver o relatório: `npx playwright show-report`. Para rodar mais rápido, contra o build de produção: `PAUTA_PROD=1 npm run test:e2e` (faz o build na pasta `.next-e2e` antes, cerca de 1 min)
 
 Se algo falhar, confira primeiro o `.env.local` (passo 4) e reinicie o `npm run dev`. Se uma mudança no código ou no CSS não aparecer no navegador, pare o `npm run dev`, apague a pasta `.next/dev` (é só cache) e rode de novo.
 

@@ -14,6 +14,7 @@ import {
 import { idDeImovelValido } from "@/lib/imovel";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Visitas do lado do corretor (RF21). O banco confere acesso, catálogo e horário
 // (pedir_visita e cancelar_visita); aqui ficam só os horários fixos e os 14 dias, que
@@ -48,6 +49,7 @@ export async function pedirVisita(pedido: {
     return { erro: mensagemDoErroDeVisita(error.hint) };
   }
 
+  avisarPeloWhatsApp();
   revalidatePath(`/assinante/imoveis/${imovelId}`);
   revalidatePath("/assinante/negociacoes");
   return {};
@@ -61,6 +63,7 @@ export async function cancelarMinhaVisita(id: string): Promise<{ erro?: string }
   const { error } = await supabase.rpc("cancelar_visita", { p_visita: id });
   if (error) return { erro: mensagemDoErroDeVisita(error.hint) };
 
+  avisarPeloWhatsApp();
   revalidatePath("/assinante/negociacoes");
   revalidatePath("/assinante/imoveis/[id]", "page");
   return {};

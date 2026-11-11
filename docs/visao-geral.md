@@ -144,10 +144,28 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 7. Visita | Pedido e confirmação | O corretor vê a resposta do proprietário | — |
 | 8. Proposta | Envio e aceite, várias ao mesmo tempo | Duas propostas aceitas deixam o imóvel em negociação | — |
 | 9. Contrato e venda | Envio, conferência, comissão | Aprovar marca vendido e recusa as outras numa operação só | — (o admin registra o valor em R$ do contrato; a % fica para antes do piloto) |
-| 10. Avisos | Lista no app e WhatsApp | Cada evento gera aviso nos dois canais | — (provedor decidido em 09/11/2026) |
+| 10. Avisos | Lista no app e WhatsApp | Cada evento gera aviso na lista do app e entra na fila do WhatsApp de quem aceitou, com o envio à Meta testado por simulação (a entrega real fica para o piloto; decidido em 10/11/2026) | — (provedor decidido em 09/11/2026) |
 | 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 10/11/2026 (WhatsApp, passo 10.3a)
+
+- O número de teste da Meta (+1 555) não entrega para celulares do Brasil: o `hello_world` para um celular de SC falhou com o erro 130497 ("Business account is restricted from messaging users in this country"). A Meta limita mensagens de contas novas de fora do Brasil para números brasileiros.
+- Por isso, a Etapa 10 segue com o envio simulado: a fila, o `after()`, as tentativas e as falhas são feitos e testados com a chamada à Meta trocada por uma falsa no teste. O código fica pronto para a Meta de verdade; continua tudo gratuito.
+- A entrega real num celular brasileiro passa a ser conferida no piloto (Etapa 13), com o número próprio do PAUTA. Se a conta nova também for limitada para o Brasil no início, é lá que se resolve (verificação da empresa, portfólio no Brasil, histórico de envio).
+- O "Pronto quando" da Etapa 10 passa a ser: cada evento do fluxo gera aviso na lista do app e entra na fila do WhatsApp de quem aceitou, com o envio à Meta testado por simulação.
+- O app envia para o telefone do perfil, com 55 na frente, e a Meta acha a conta do WhatsApp sozinha: no teste, a resposta (`wa_id`) de um celular de SC veio sem o 9 depois do DDD, sinal de que a Meta faz essa conversão. A entrega desses números é conferida no piloto.
+
+## Decisões tomadas em 09/11/2026 (plano da Etapa 10)
+
+- O aviso nasce no banco, por gatilhos nas tabelas `imoveis`, `visitas`, `propostas`, `contratos`, `assinantes` e `perfis`, que chamam uma função interna `criar_aviso()` na mesma operação do evento. Assim os efeitos em massa (recusa dos outros pedidos do horário, venda, corretor removido) e as chamadas diretas pela API também geram aviso, sem reescrever as funções já auditadas. Quem agiu não recebe aviso da própria ação. Os textos ficam num único arquivo do app.
+- Eventos com aviso: para o proprietário, imóvel aprovado, reprovado ou captado aguardando o aceite, pedido de visita, visita cancelada pelo corretor ou pela saída dele da imobiliária, nova proposta, proposta retirada, contrato enviado e venda registrada; para o corretor, visita confirmada, recusada (também quando o horário foi confirmado para outro), cancelada pelo proprietário ou pela venda, proposta aceita, recusada (também pela venda), aceite desfeito, contrato aprovado ou recusado (também o recusado pela venda) e imóvel novo no catálogo; para o responsável da imobiliária ou o autônomo, conta ativada e corretor que entrou pelo convite.
+- Sem aviso: contrato recusado para o proprietário (a proposta segue aceita), bloqueio pelo admin e corretor removido (a pessoa cai na tela de acesso suspenso). O admin não tem lista de avisos: vê tudo pelos cartões do painel, e o aviso de vencimento da exclusividade (RF30) vai para o painel na Etapa 12.
+- "Imóvel novo no catálogo" só aparece na lista do app, sem WhatsApp, para todos os assinantes ativos, numa linha só (não uma por assinante). "Mensalidade paga" entra na Etapa 11. Por isso o "visto" é uma data por pessoa: tudo o que foi criado até ela já foi visto.
+- O WhatsApp exige consentimento: caixa "Receber avisos no WhatsApp" no cadastro e no convite, e uma chave em Minha conta. Contas que já existem começam desligadas. A lista no app vale sempre.
+- O WhatsApp sai do servidor do Next depois da resposta (`after()`), por uma fila no banco: só o servidor, com um segredo guardado no Vault e no ambiente, lê o telefone do destinatário. Sem a chave secreta do Supabase. No máximo 3 tentativas por aviso. Sem link na mensagem até o endereço público da Etapa 13.
+- Cada corretor envia no máximo 10 propostas e 20 pedidos de visita por hora, contados no banco.
 
 ## Decisões tomadas em 09/11/2026 (provedor do WhatsApp)
 

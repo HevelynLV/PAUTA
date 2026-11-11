@@ -4,7 +4,9 @@ import { BotaoSair } from "@/components/BotaoSair";
 import { Logo } from "@/components/ui/Logo";
 import { MenuInferior } from "@/components/ui/MenuInferior";
 import { MenuLateral } from "@/components/ui/MenuLateral";
+import type { ItemMenu } from "@/components/ui/itensMenu";
 import { usuarioAtual, type TipoUsuario } from "@/lib/auth";
+import { avisosNaoVistos } from "@/lib/avisos";
 import type { MenusDaArea } from "@/lib/menus";
 
 // Moldura das áreas logadas: no celular, o conteúdo e o menu de baixo
@@ -25,7 +27,7 @@ export function AreaLogada({ menu, children }: { menu: MenusDaArea; children: Re
           <QuemEsta />
         </Suspense>
         <Suspense fallback={null}>
-          <MenuLateral itens={menu.computador} rotulo={menu.rotulo} />
+          <MenuComAvisos itens={menu.computador} rotulo={menu.rotulo} Menu={MenuLateral} />
         </Suspense>
         {/* No celular, o "Sair" fica na tela Minha conta (passo 3.5). */}
         <BotaoSair className="mt-auto" />
@@ -35,12 +37,30 @@ export function AreaLogada({ menu, children }: { menu: MenusDaArea; children: Re
         <main className="flex flex-1 flex-col">{children}</main>
         <div className="sticky bottom-0 md:hidden">
           <Suspense fallback={<div className="h-[72px] border-t border-line bg-card" />}>
-            <MenuInferior itens={menu.celular} rotulo={menu.rotulo} />
+            <MenuComAvisos itens={menu.celular} rotulo={menu.rotulo} Menu={MenuInferior} />
           </Suspense>
         </div>
       </div>
     </div>
   );
+}
+
+// O número de avisos não vistos no item Avisos (Etapa 10). O admin não tem o item, e aí
+// nada é consultado. O layout não roda de novo ao navegar: a tela de avisos chama
+// router.refresh() depois de marcar como visto, para o número sumir.
+async function MenuComAvisos({
+  itens,
+  rotulo,
+  Menu,
+}: {
+  itens: ItemMenu[];
+  rotulo: string;
+  Menu: typeof MenuLateral | typeof MenuInferior;
+}) {
+  if (!itens.some((item) => item.icone === "avisos")) return <Menu itens={itens} rotulo={rotulo} />;
+  const naoVistos = await avisosNaoVistos();
+  const comNumero = itens.map((item) => (item.icone === "avisos" && naoVistos > 0 ? { ...item, contador: naoVistos } : item));
+  return <Menu itens={comNumero} rotulo={rotulo} />;
 }
 
 const rotuloDoTipo: Record<TipoUsuario, string> = {

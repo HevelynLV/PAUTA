@@ -1991,16 +1991,17 @@ end $$;
 
 -- Fotos (RF09) e registro de edições (RF17) -------------------------
 
-do $$ declare v text; n int; i uuid; begin
+do $$ declare v text; n int; i uuid; j uuid; begin
   begin
     perform pg_temp.criar_proprietario('00000000-0000-4000-a000-000000000001');
     i := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'disponivel');
     insert into public.fotos_imovel (imovel_id, caminho, ordem) values (i, i || '/disponivel.jpg', 1);
-    i := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'pendente');
-    insert into public.fotos_imovel (imovel_id, caminho, ordem) values (i, i || '/pendente.jpg', 1);
+    j := pg_temp.criar_imovel('00000000-0000-4000-a000-000000000001', 'pendente');
+    insert into public.fotos_imovel (imovel_id, caminho, ordem) values (j, j || '/pendente.jpg', 1);
     perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
-    select count(*)::text into v from public.fotos_imovel;
+    -- Só as fotos deste teste: o assinante ativo vê também as dos imóveis de verdade.
+    select count(*)::text into v from public.fotos_imovel where imovel_id in (i, j);
     raise exception using errcode = 'TR001';
   exception when sqlstate 'TR001' then null;
             when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
@@ -3119,7 +3120,8 @@ do $$ declare v text := ''; n int; i uuid; j uuid; begin
     perform pg_temp.criar_arquivo(j, 'pendente.jpg');
     perform pg_temp.criar_assinante('00000000-0000-4000-a000-000000000031', 'ativo');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
-    v := pg_temp.arquivos_visiveis();
+    -- Só os arquivos deste teste: o assinante ativo vê também as fotos dos imóveis de verdade.
+    v := (pg_temp.arquivos_visiveis_de(i)::int + pg_temp.arquivos_visiveis_de(j)::int)::text;
     reset role;
     perform pg_temp.mudar_status_do_assinante_de('00000000-0000-4000-a000-000000000031', 'bloqueado');
     perform pg_temp.entrar_como('00000000-0000-4000-a000-000000000031');
@@ -7606,6 +7608,783 @@ do $$ declare v text; im uuid; p uuid; q uuid; begin
   insert into resultado (teste, esperado, obtido)
   values ('Contrato recusado antes do aceite atual não aparece; o recusado depois do aceite aparece',
           'nenhum / recusado / nenhum, recusado', v);
+end $$;
+
+-- ---------------------------------------------------------------
+-- 20. Avisos (migration 20261109232807_avisos)
+-- ---------------------------------------------------------------
+
+-- Cria um aviso como os gatilhos do 10.2b fariam (o roteiro roda como dono do banco).
+create or replace function pg_temp.aviso(p_destinatario uuid, p_tipo text default 'visita_pedida',
+                                         p_link text default '/proprietario')
+returns bigint
+language sql
+as $$
+  select public.criar_aviso(p_destinatario, p_tipo::public.tipo_aviso, null,
+                            '{"titulo":"Imóvel de teste"}', p_link);
+$$;
+
+-- Age como p_id só para auth.uid(), sem trocar de papel (para chamar criar_aviso).
+create or replace function pg_temp.agir_como(p_id uuid)
+returns void
+language sql
+as $$
+  select set_config('request.jwt.claims', json_build_object('sub', p_id, 'role', 'authenticated')::text, true);
+$$;
+
+do $$ declare v text; begin
+  select (relrowsecurity)::text into v from pg_class where oid = 'public.avisos'::regclass;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos: RLS ligado na tabela', 'true', v);
+end $$;
+
+-- Cada um lê só os próprios avisos; o admin não tem lista.
+do $$ declare v text; x text; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'ativo');
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.aviso(pg_temp.u(1));
+    perform pg_temp.aviso(pg_temp.u(1), 'proposta_recebida');
+    perform pg_temp.aviso(pg_temp.u(31), 'visita_confirmada', '/assinante/negociacoes');
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    select count(*)::text into v from public.meus_avisos();
+    select count(*)::text into x from public.avisos;
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    select count(*)::text into x from public.meus_avisos();
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    select string_agg(tipo::text, ',' order by id) into x from public.meus_avisos();
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    select count(*)::text into x from public.avisos where destinatario_id in (pg_temp.u(1), pg_temp.u(31));
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como_visitante();
+    v := v || ' / ' || pg_temp.tentar('select count(*) from public.avisos');
+    v := v || ' / ' || pg_temp.tentar('select public.meus_avisos()');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos: cada um lê só os próprios; outro proprietário, o admin e o visitante não',
+          -- assinatura_ativada vem do gatilho da migration avisos_nos_eventos (assinante criado ativo).
+          '2 / 2 / 0 / assinatura_ativada,visita_confirmada / 0 / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+-- Ninguém grava pela API nem lê as colunas do WhatsApp; criar_aviso() é só dos gatilhos.
+do $$ declare v text; a bigint; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    a := pg_temp.aviso(pg_temp.u(1));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format(
+      'insert into public.avisos (destinatario_id, tipo, link, whatsapp) values (%L, ''visita_pedida'', ''/proprietario'', ''desligado'')',
+      pg_temp.u(1)));
+    v := v || ' / ' || pg_temp.tentar(format('update public.avisos set link = ''/x'' where id = %s', a));
+    v := v || ' / ' || pg_temp.tentar(format('delete from public.avisos where id = %s', a));
+    v := v || ' / ' || pg_temp.tentar('select whatsapp from public.avisos');
+    v := v || ' / ' || pg_temp.tentar(format(
+      'select public.criar_aviso(%L, ''visita_pedida'', null, ''{}'', ''/proprietario'')', pg_temp.u(1)));
+    v := v || ' / ' || pg_temp.tentar('select public.avisos_nao_vistos()');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos: ninguém insere, muda, apaga, lê o WhatsApp nem chama criar_aviso pela API',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / permitido', v);
+end $$;
+
+-- "Imóvel novo": uma linha só, que só o assinante com acesso vê, e só depois da ativação.
+do $$ declare v text; x text; a bigint; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'ativo');
+    perform pg_temp.criar_assinante(pg_temp.u(32), 'pendente');
+    perform pg_temp.criar_assinante(pg_temp.u(33), 'bloqueado');
+    perform pg_temp.criar_assinante(pg_temp.u(34), 'vencido');
+    perform pg_temp.montar_equipe();
+    update public.perfis set removido_em = now() where id = pg_temp.u(22);
+    a := pg_temp.aviso(null, 'imovel_novo', '/assinante');
+    select count(*)::text || ' / ' || max(whatsapp::text) into v from public.avisos where id = a;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || (select count(*) from public.meus_avisos() where id = a);
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := v || ' / ' || (select count(*) from public.meus_avisos() where id = a);
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    v := v || ' / ' || (select count(*) from public.meus_avisos() where id = a);
+    -- Pendente, bloqueado, vencido, removido, proprietário e admin não veem.
+    x := '';
+    perform pg_temp.entrar_como(pg_temp.u(32)); x := x || (select count(*) from public.avisos where id = a);
+    perform pg_temp.entrar_como(pg_temp.u(33)); x := x || (select count(*) from public.avisos where id = a);
+    perform pg_temp.entrar_como(pg_temp.u(34)); x := x || (select count(*) from public.avisos where id = a);
+    perform pg_temp.entrar_como(pg_temp.u(22)); x := x || (select count(*) from public.avisos where id = a);
+    perform pg_temp.entrar_como(pg_temp.u(1));  x := x || (select count(*) from public.avisos where id = a);
+    perform pg_temp.entrar_como(pg_temp.u(9));  x := x || (select count(*) from public.avisos where id = a);
+    v := v || ' / ' || x;
+    -- Criado antes de o assinante ser ativado: não aparece.
+    reset role;
+    update public.avisos set criado_em = now() - interval '1 hour' where id = a;
+    update public.assinantes set ativado_em = now() where id = (select assinante_id from public.perfis where id = pg_temp.u(31));
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || (select count(*) from public.avisos where id = a);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Imóvel novo: uma linha, sem WhatsApp; só assinante com acesso vê, e só o criado depois da ativação',
+          '1 / nao_se_aplica / 1 / 1 / 1 / 000000 / 0', v);
+end $$;
+
+-- Quem agiu não recebe; o WhatsApp só fica pendente para quem aceitou.
+do $$ declare v text; a bigint; b bigint; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.criar_proprietario(pg_temp.u(2));
+    update public.perfis set whatsapp_aceito = true, whatsapp_aceito_em = now() where id = pg_temp.u(2);
+    perform pg_temp.agir_como(pg_temp.u(1));
+    a := pg_temp.aviso(pg_temp.u(1));
+    b := pg_temp.aviso(pg_temp.u(2));
+    v := coalesce(a::text, 'nenhum');
+    perform pg_temp.agir_como(pg_temp.u(2));
+    a := pg_temp.aviso(pg_temp.u(1));
+    select v || ' / ' || (select whatsapp::text from public.avisos where id = a)
+             || ' / ' || (select whatsapp::text from public.avisos where id = b) into v;
+    v := v || ' / ' || coalesce(pg_temp.aviso(pg_temp.u(77))::text, 'nenhum');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('criar_aviso: quem agiu não recebe; WhatsApp pendente só para quem aceitou; conta inexistente não recebe',
+          'nenhum / desligado / pendente / nenhum', v);
+end $$;
+
+-- Regras da tabela: link só interno, "para todos" só no imóvel novo.
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    v := pg_temp.tentar(format('select pg_temp.aviso(%L, ''visita_pedida'', ''https://outro.site'')', pg_temp.u(1)));
+    v := v || ' / ' || pg_temp.tentar(format('select pg_temp.aviso(%L, ''visita_pedida'', ''//outro.site'')', pg_temp.u(1)));
+    v := v || ' / ' || pg_temp.tentar('select pg_temp.aviso(null, ''visita_pedida'', ''/assinante'')');
+    v := v || ' / ' || pg_temp.tentar(format('select pg_temp.aviso(%L, ''imovel_novo'', ''/assinante'')', pg_temp.u(1)));
+    v := v || ' / ' || pg_temp.tentar(format('select pg_temp.aviso(%L, ''visita_pedida'', ''/proprietario/imoveis/1'')', pg_temp.u(1)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos: link só dentro do app; "para todos" só no imóvel novo',
+          'bloqueado (23514) / bloqueado (23514) / bloqueado (23514) / bloqueado (23514) / permitido', v);
+end $$;
+
+-- Contador, "visto" e páginas.
+do $$ declare v text; x text; a bigint; b bigint; c bigint; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    a := pg_temp.aviso(pg_temp.u(1));
+    b := pg_temp.aviso(pg_temp.u(1));
+    c := pg_temp.aviso(pg_temp.u(1));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := public.avisos_nao_vistos()::text;
+    select string_agg((id = c)::text || ':' || novo, ',') into x from public.meus_avisos(null, 1);
+    v := v || ' / ' || x;
+    select string_agg((id = b)::text, ',') into x from public.meus_avisos(c, 1);
+    v := v || ' / ' || x;
+    select count(*)::text into x from public.meus_avisos(a);
+    v := v || ' / ' || x;
+    perform public.marcar_avisos_vistos(now());
+    v := v || ' / ' || public.avisos_nao_vistos();
+    select string_agg(novo::text, ',') into x from public.meus_avisos();
+    v := v || ' / ' || x;
+    -- Não volta para trás nem passa de agora.
+    perform public.marcar_avisos_vistos(now() - interval '1 day');
+    v := v || ' / ' || public.avisos_nao_vistos();
+    perform public.marcar_avisos_vistos(now() + interval '1 day');
+    select (avisos_vistos_ate = now())::text into x from public.perfis where id = pg_temp.u(1);
+    v := v || ' / ' || x;
+    -- Não dá para mexer na data direto.
+    v := v || ' / ' || pg_temp.tentar(format('update public.perfis set avisos_vistos_ate = null where id = %L', pg_temp.u(1)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos: contador, marcar como visto (sem voltar e sem passar de agora) e páginas',
+          '3 / true:true / true / 0 / 0 / false,false,false / 0 / true / bloqueado (42501)', v);
+end $$;
+
+-- Aceite do WhatsApp: no cadastro, na conta, e nunca por update direto.
+do $$ declare v text; x text; begin
+  begin
+    perform pg_temp.criar_conta(pg_temp.u(1),
+      '{"tipo":"proprietario","nome":"Proprietário de Teste","telefone":"48999990000","whatsapp":"true"}');
+    perform pg_temp.criar_conta(pg_temp.u(2),
+      '{"tipo":"proprietario","nome":"Proprietário de Teste","telefone":"48999990000","whatsapp":"sim"}');
+    select whatsapp_aceito || ':' || (whatsapp_aceito_em is not null) into v from public.perfis where id = pg_temp.u(1);
+    select whatsapp_aceito || ':' || (whatsapp_aceito_em is not null) into x from public.perfis where id = pg_temp.u(2);
+    v := v || ' / ' || x;
+    select (raw_user_meta_data ? 'whatsapp')::text into x from auth.users where id = pg_temp.u(1);
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(2));
+    perform public.mudar_whatsapp(true);
+    select whatsapp_aceito || ':' || (whatsapp_aceito_em is not null) into x from public.perfis where id = pg_temp.u(2);
+    v := v || ' / ' || x;
+    perform public.mudar_whatsapp(false);
+    select whatsapp_aceito || ':' || (whatsapp_aceito_em is not null) into x from public.perfis where id = pg_temp.u(2);
+    v := v || ' / ' || x;
+    v := v || ' / ' || pg_temp.tentar('select public.mudar_whatsapp(null)');
+    v := v || ' / ' || pg_temp.tentar(format('update public.perfis set whatsapp_aceito = true where id = %L', pg_temp.u(2)));
+    -- Só a própria conta muda.
+    perform public.mudar_whatsapp(false);
+    reset role;
+    select whatsapp_aceito::text into x from public.perfis where id = pg_temp.u(1);
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('WhatsApp: aceite no cadastro só com "true", sai do metadata, liga e desliga na conta, sem update direto',
+          'true:true / false:false / false / true:true / false:false / bloqueado (P0001) / bloqueado (42501) / true', v);
+end $$;
+
+-- A ativação fica registrada (é dela que conta o "imóvel novo").
+do $$ declare v text; x text; begin
+  begin
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'pendente');
+    select (a.ativado_em is null)::text into v
+    from public.assinantes a join public.perfis p on p.assinante_id = a.id where p.id = pg_temp.u(31);
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'ativo');
+    select (a.ativado_em = now())::text into x
+    from public.assinantes a join public.perfis p on p.assinante_id = a.id where p.id = pg_temp.u(31);
+    v := v || ' / ' || x;
+    update public.assinantes set ativado_em = now() - interval '1 day'
+    where id = (select assinante_id from public.perfis where id = pg_temp.u(31));
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'vencido');
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'ativo');
+    select (a.ativado_em < now())::text into x
+    from public.assinantes a join public.perfis p on p.assinante_id = a.id where p.id = pg_temp.u(31);
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Assinante: a primeira ativação fica registrada e não muda quando volta de vencido',
+          'true / true / true', v);
+end $$;
+
+-- ---------------------------------------------------------------
+-- 21. Avisos dos eventos (migration 20261109234543_avisos_nos_eventos)
+-- ---------------------------------------------------------------
+
+-- Os tipos dos avisos de p_perfil, na ordem em que nasceram ('-' se nenhum). Ler como
+-- dono do banco: chame depois de "reset role".
+create or replace function pg_temp.avisos_de(p_perfil uuid)
+returns text
+language sql
+as $$
+  select coalesce(string_agg(tipo::text, ',' order by id), '-')
+  from public.avisos where destinatario_id = p_perfil;
+$$;
+
+-- Imóvel: aprovado (e imóvel novo para os assinantes), reprovado com motivo, captado e
+-- captado aceito (só o imóvel novo: quem aceitou foi o próprio dono).
+do $$ declare v text; i uuid; j uuid; k uuid; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    i := pg_temp.criar_imovel(pg_temp.u(1), 'pendente');
+    j := pg_temp.criar_imovel(pg_temp.u(1), 'pendente');
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.aprovar_imovel(i, 1);
+    perform public.reprovar_imovel(j, 'Faltam fotos da cozinha');
+    k := pg_temp.captar(pg_temp.u(1));
+    reset role;
+    perform pg_temp.criar_foto(k, 1);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.aceitar_termo_captado(k, (select versao from public.imoveis where id = k), '2026-10-provisorio', true);
+    reset role;
+    v := pg_temp.avisos_de(pg_temp.u(1)) || ' / ' || pg_temp.avisos_de(pg_temp.u(9))
+      || ' / ' || (select count(*) from public.avisos where tipo = 'imovel_novo' and imovel_id in (i, k))
+      || ' / ' || (select (dados ? 'exclusividade_fim')::text from public.avisos where tipo = 'imovel_aprovado' and imovel_id = i)
+      || ' / ' || (select dados ->> 'motivo' from public.avisos where tipo = 'imovel_reprovado' and imovel_id = j)
+      || ' / ' || (select (link = '/proprietario/imoveis/' || k || '/aceitar')::text from public.avisos where tipo = 'imovel_captado')
+      || ' / ' || (select (link = '/assinante/imoveis/' || i)::text from public.avisos where tipo = 'imovel_novo' and imovel_id = i);
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos do imóvel: aprovado, reprovado com motivo, captado; imóvel novo no aprovado e no captado aceito',
+          'imovel_aprovado,imovel_reprovado,imovel_captado / - / 2 / true / Faltam fotos da cozinha / true / true', v);
+end $$;
+
+-- Visita: pedido, confirmada, horário dado a outro (recusa em massa), recusada,
+-- cancelada pelo dono e pelo corretor. O aviso do corretor nunca leva o contato do dono.
+do $$ declare v text; im uuid; h timestamptz := date_trunc('minute', now() + interval '2 days'); a uuid; b uuid; c uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform public.pedir_visita(im, h, null);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    perform public.pedir_visita(im, h, null);
+    perform public.pedir_visita(im, h + interval '1 hour', null);
+    reset role;
+    select id into a from public.visitas where corretor_id = pg_temp.u(31);
+    select id into b from public.visitas where corretor_id = pg_temp.u(32) and horario = h + interval '1 hour';
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.confirmar_visita(a);
+    perform public.recusar_visita(b);
+    perform public.cancelar_visita(a);
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    perform public.pedir_visita(im, h + interval '2 hours', null);
+    reset role;
+    select id into c from public.visitas where corretor_id = pg_temp.u(32) and horario = h + interval '2 hours';
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    perform public.cancelar_visita(c);
+    reset role;
+    v := pg_temp.avisos_de(pg_temp.u(1)) || ' / ' || pg_temp.avisos_de(pg_temp.u(31)) || ' / ' || pg_temp.avisos_de(pg_temp.u(32))
+      || ' / ' || (select (dados ->> 'corretor') || ':' || coalesce(dados ->> 'imobiliaria', 'sem imobiliária')
+                   from public.avisos where destinatario_id = pg_temp.u(1) order by id limit 1)
+      || ' / ' || (select dados ->> 'endereco' from public.avisos where tipo = 'visita_confirmada')
+      || ' / ' || (select count(*) from public.avisos
+                   where destinatario_id in (pg_temp.u(31), pg_temp.u(32))
+                     and (dados ? 'telefone' or dados ? 'email' or dados::text like '%48999990000%'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos da visita: pedido, confirmada, horário de outro, recusada, cancelada pelo dono e pelo corretor; sem contato do dono',
+          'visita_pedida,visita_pedida,visita_pedida,visita_pedida,visita_cancelada_pelo_corretor'
+          || ' / assinatura_ativada,visita_confirmada,visita_cancelada_pelo_proprietario'
+          || ' / assinatura_ativada,visita_horario_ocupado,visita_recusada'
+          || ' / Autônomo de Teste:sem imobiliária / Rua de Teste, 100 / 0', v);
+end $$;
+
+-- Proposta: nova, aceita, recusada, aceite desfeito e retirada. O nome do comprador não
+-- entra em aviso nenhum.
+do $$ declare v text; im uuid; p uuid; q uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform pg_temp.tentar(pg_temp.enviar(im, '450000', 'Escritura em 60 dias', 'Comprador Secreto'));
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    perform pg_temp.tentar(pg_temp.enviar(im, '440000'));
+    reset role;
+    select id into p from public.propostas where corretor_id = pg_temp.u(31);
+    select id into q from public.propostas where corretor_id = pg_temp.u(32);
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    perform public.aceitar_proposta(p);
+    perform public.recusar_proposta(q);
+    perform public.desfazer_aceite(p);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    perform public.cancelar_proposta(p);
+    reset role;
+    v := pg_temp.avisos_de(pg_temp.u(1)) || ' / ' || pg_temp.avisos_de(pg_temp.u(31)) || ' / ' || pg_temp.avisos_de(pg_temp.u(32))
+      || ' / ' || (select string_agg(dados ->> 'valor', ',' order by id) from public.avisos where destinatario_id = pg_temp.u(1))
+      || ' / ' || (select count(*) from public.avisos where dados::text like '%Secreto%');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos da proposta: nova, aceita, recusada, aceite desfeito e retirada; sem o nome do comprador',
+          'proposta_recebida,proposta_recebida,proposta_retirada / assinatura_ativada,proposta_aceita,aceite_desfeito'
+          || ' / assinatura_ativada,proposta_recusada / 450000.00,440000.00,450000.00 / 0', v);
+end $$;
+
+-- Contrato e venda: enviado (para o dono), recusado com motivo (só para o corretor), e na
+-- venda: visita, proposta e outro contrato recusados pela venda; venda para o dono e o
+-- corretor, sem a comissão. O admin não recebe nada.
+do $$ declare v text; im uuid; p uuid; q uuid; c uuid; d uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32), 'aceita');
+    perform pg_temp.criar_visita(im, pg_temp.u(32));
+    c := pg_temp.criar_contrato(p);
+    d := pg_temp.criar_contrato(q, 'em_analise', 1);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.recusar_contrato(d, 'Falta a assinatura do comprador');
+    reset role;
+    perform pg_temp.criar_contrato(q, 'em_analise', 2);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.aprovar_contrato(c, 460000, 9000);
+    reset role;
+    v := pg_temp.avisos_de(pg_temp.u(1)) || ' / ' || pg_temp.avisos_de(pg_temp.u(31)) || ' / ' || pg_temp.avisos_de(pg_temp.u(32))
+      || ' / ' || pg_temp.avisos_de(pg_temp.u(9))
+      || ' / ' || (select dados ->> 'motivo' from public.avisos where tipo = 'contrato_recusado')
+      || ' / ' || (select string_agg(dados ->> 'valor_final', ',' order by id) from public.avisos where tipo in ('imovel_vendido', 'contrato_aprovado'))
+      || ' / ' || (select count(*) from public.avisos where dados::text like '%9000%' or dados ? 'comissao');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos do contrato e da venda: enviado, recusado com motivo, tudo o que a venda encerra e a venda; nada para o admin',
+          'visita_pedida,contrato_enviado,contrato_enviado,contrato_enviado,imovel_vendido'
+          || ' / assinatura_ativada,contrato_aprovado'
+          || ' / assinatura_ativada,contrato_recusado,visita_cancelada_pela_venda,proposta_recusada_pela_venda,contrato_recusado_pela_venda'
+          || ' / - / Falta a assinatura do comprador / 460000.00,460000.00 / 0', v);
+end $$;
+
+-- "Pela venda" só dentro de aprovar_contrato (migration 20261111012620_avisos_auditoria):
+-- a recusa normal com o mesmo texto do motivo automático e a proposta recusada por quem
+-- não é o dono, fora da venda, não viram "pela venda".
+do $$ declare v text; im uuid; p uuid; q uuid; d uuid; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    p := pg_temp.criar_proposta(im, pg_temp.u(31), 'aceita');
+    q := pg_temp.criar_proposta(im, pg_temp.u(32));
+    d := pg_temp.criar_contrato(p);
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    perform public.recusar_contrato(d, 'Imóvel vendido por outra proposta');
+    reset role;
+    perform pg_temp.agir_como(pg_temp.u(9));
+    update public.propostas set status = 'recusada', respondida_em = now() where id = q;
+    perform set_config('request.jwt.claims', '', true);
+    v := pg_temp.avisos_de(pg_temp.u(31)) || ' / ' || pg_temp.avisos_de(pg_temp.u(32))
+      || ' / ' || coalesce(current_setting('pauta.imovel_em_venda', true), '');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos: recusa fora da venda nunca sai como "pela venda", nem com o texto do motivo automático',
+          'assinatura_ativada,contrato_recusado / assinatura_ativada,proposta_recusada / ', v);
+end $$;
+
+-- A marca da venda não vale para a API: só aprovar_contrato a grava.
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format('select public.imovel_em_venda(%L)', gen_random_uuid()));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos: imovel_em_venda() fechada para a API', 'bloqueado (42501)', v);
+end $$;
+
+-- Corretor removido da equipe: o dono sabe que a visita e a proposta foram canceladas; o
+-- corretor removido não recebe nada. O responsável soube da ativação e da entrada dele.
+do $$ declare v text; im uuid; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.equipe_de_visita();
+    im := pg_temp.criar_imovel(pg_temp.u(1), 'disponivel');
+    perform pg_temp.criar_visita(im, pg_temp.u(21));
+    perform pg_temp.criar_proposta(im, pg_temp.u(21), 'aceita');
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    perform public.remover_corretor(pg_temp.u(21));
+    reset role;
+    v := pg_temp.avisos_de(pg_temp.u(1)) || ' / ' || pg_temp.avisos_de(pg_temp.u(21)) || ' / ' || pg_temp.avisos_de(pg_temp.u(11))
+      || ' / ' || (select dados ->> 'imobiliaria' from public.avisos where tipo = 'visita_cancelada_corretor_saiu')
+      || ' / ' || (select (link = '/assinante/equipe')::text from public.avisos where tipo = 'corretor_entrou');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Avisos da equipe: visita e proposta do corretor removido avisam o dono; o responsável soube da ativação e do corretor novo',
+          'visita_pedida,visita_cancelada_corretor_saiu,proposta_cancelada_corretor_saiu / - / assinatura_ativada,corretor_entrou / Imobiliária de Teste / true', v);
+end $$;
+
+-- Ativação pelo admin avisa uma vez só: voltar de vencido para ativo não avisa de novo.
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'pendente');
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    update public.assinantes set status = 'ativo'
+    where id = (select assinante_id from public.perfis where id = pg_temp.u(31));
+    reset role;
+    v := pg_temp.avisos_de(pg_temp.u(31));
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'vencido');
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(31), 'ativo');
+    v := v || ' / ' || pg_temp.avisos_de(pg_temp.u(31));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Aviso de conta ativada: uma vez só', 'assinatura_ativada / assinatura_ativada', v);
+end $$;
+
+-- Limite por hora: 10 propostas e 20 pedidos de visita por corretor; o que tem mais de
+-- uma hora não conta.
+do $$ declare v text; im uuid; n int; begin
+  begin
+    im := pg_temp.cenario_de_visita();
+    for n in 1..9 loop
+      perform pg_temp.criar_proposta(im, pg_temp.u(31), 'recusada');
+    end loop;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := pg_temp.tentar(pg_temp.enviar(im));
+    reset role;
+    update public.propostas set status = 'recusada' where corretor_id = pg_temp.u(31) and status = 'aguardando';
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    reset role;
+    update public.propostas set criada_em = now() - interval '2 hours' where corretor_id = pg_temp.u(31);
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.enviar(im));
+    reset role;
+    for n in 1..19 loop
+      perform pg_temp.criar_visita(im, pg_temp.u(32), now() + interval '3 days' + n * interval '1 hour', 'recusada');
+    end loop;
+    perform pg_temp.entrar_como(pg_temp.u(32));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.pedir(im, now() + interval '2 days'));
+    v := v || ' / ' || pg_temp.tentar(pg_temp.pedir(im, now() + interval '2 days 1 hour'));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Limite por hora: a 11ª proposta e o 21º pedido de visita são recusados; mais de uma hora não conta',
+          'permitido / bloqueado (P0001) limite_por_hora / permitido / permitido / bloqueado (P0001) limite_por_hora', v);
+end $$;
+
+-- Os gatilhos e ajudantes dos avisos não podem ser chamados pela API.
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar(format('select public.dados_do_corretor(%L)', pg_temp.u(1)));
+    v := v || ' / ' || pg_temp.tentar(format('select public.perfil_eh_admin(%L)', pg_temp.u(1)));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Ajudantes dos avisos fechados para a API', 'bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+-- ---------------------------------------------------------------
+-- 22. Fila do WhatsApp (migration 20261111000433_avisos_whatsapp)
+-- ---------------------------------------------------------------
+
+-- O segredo da fila, lido do Vault pelo dono do banco (o roteiro não sabe o do .env.local).
+create or replace function pg_temp.segredo_da_fila()
+returns text
+language sql
+as $$
+  select ds.decrypted_secret from vault.decrypted_secrets ds where ds.name = 'pauta_whatsapp_fila';
+$$;
+
+-- O banco é compartilhado: tira da fila os avisos que não são do teste (o bloco desfaz).
+create or replace function pg_temp.so_estes_na_fila(p_ids bigint[])
+returns void
+language sql
+as $$
+  update public.avisos set whatsapp = 'expirado'
+  where whatsapp in ('pendente', 'enviando', 'falhou') and whatsapp_tentativas < 3
+    and id <> all (p_ids);
+$$;
+
+-- Proprietário que aceitou receber pelo WhatsApp.
+create or replace function pg_temp.proprietario_com_whatsapp(p_id uuid)
+returns void
+language sql
+as $$
+  select pg_temp.criar_proprietario(p_id);
+  select pg_temp.agir_como(p_id);
+  select public.mudar_whatsapp(true);
+  -- Sem isto, o aviso seguinte para a mesma pessoa não nasceria (quem agiu não recebe).
+  select set_config('request.jwt.claims', '', true);
+$$;
+
+do $$ declare v text; begin
+  -- Gerado com 64 caracteres (README). Curto demais costuma ser o exemplo copiado sem trocar.
+  select case when coalesce(max(decrypted_secret), '') = '' then 'falta'
+              when max(length(decrypted_secret)) < 32 then 'curto demais'
+              else 'existe' end into v
+  from vault.decrypted_secrets where name = 'pauta_whatsapp_fila';
+  insert into resultado (teste, esperado, obtido)
+  values ('O segredo pauta_whatsapp_fila está no Vault, com o valor do .env.local (sem ele, nenhum WhatsApp sai)', 'existe', v);
+end $$;
+
+-- Sem o segredo certo, ninguém pega a fila (nem lê o telefone de ninguém) nem grava resultado.
+do $$ declare v text; a bigint; begin
+  begin
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(1));
+    a := pg_temp.aviso(pg_temp.u(1));
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := pg_temp.tentar('select public.reservar_avisos_whatsapp(''errado'')');
+    v := v || ' / ' || pg_temp.tentar('select public.reservar_avisos_whatsapp(null)');
+    v := v || ' / ' || pg_temp.tentar(format('select public.registrar_envio_whatsapp(''errado'', %s, true)', a));
+    v := v || ' / ' || pg_temp.tentar('select public.conferir_segredo_da_fila(''x'')');
+    v := v || ' / ' || pg_temp.tentar('select whatsapp_reservado_em from public.avisos');
+    perform pg_temp.entrar_como_visitante();
+    v := v || ' / ' || pg_temp.tentar('select public.reservar_avisos_whatsapp(''errado'')');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Fila do WhatsApp: sem o segredo certo, nada (logado ou visitante)',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+-- Reserva uma vez só, devolve o telefone com 55 e grava o envio; o resultado não se repete.
+do $$ declare v text; x text; a bigint; s text := pg_temp.segredo_da_fila(); begin
+  begin
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(1));
+    a := pg_temp.aviso(pg_temp.u(1));
+    perform pg_temp.so_estes_na_fila(array[a]);
+    perform pg_temp.entrar_como_visitante();
+    select string_agg(r.telefone || ' ' || r.tentativa, ',') into v
+    from public.reservar_avisos_whatsapp(s) r where r.id = a;
+    reset role;
+    select whatsapp::text into x from public.avisos where id = a;
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como_visitante();
+    select count(*)::text into x from public.reservar_avisos_whatsapp(s) r where r.id = a;
+    v := v || ' / ' || x;
+    perform public.registrar_envio_whatsapp(s, a, true, 'wamid.teste');
+    reset role;
+    select whatsapp::text || ' ' || whatsapp_id || ' ' || (whatsapp_enviado_em is not null)::text into x
+    from public.avisos where id = a;
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como_visitante();
+    v := v || ' / ' || pg_temp.tentar(format('select public.registrar_envio_whatsapp(%L, %s, false, null, ''x'')', s, a));
+    v := v || ' / ' || pg_temp.tentar(format('select public.reservar_avisos_whatsapp(%L, 0)', s));
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Fila do WhatsApp: reserva uma vez, com o telefone em +55, e grava o envio só do reservado',
+          '5548999990000 1 / enviando / 0 / enviado wamid.teste true / bloqueado (P0001) aviso_nao_reservado / bloqueado (P0001) limite_invalido', v);
+end $$;
+
+-- Três falhas encerram; reservado e sem resultado por 10 minutos volta para a fila.
+do $$ declare v text; x text; a bigint; b bigint; n int; s text := pg_temp.segredo_da_fila(); begin
+  begin
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(1));
+    a := pg_temp.aviso(pg_temp.u(1));
+    b := pg_temp.aviso(pg_temp.u(1), 'proposta_recebida');
+    perform pg_temp.so_estes_na_fila(array[a, b]);
+    perform pg_temp.entrar_como_visitante();
+    for n in 1..3 loop
+      perform 1 from public.reservar_avisos_whatsapp(s) r where r.id = a;
+      perform public.registrar_envio_whatsapp(s, a, false, null, 'erro ' || n);
+      -- Passa a espera da nova tentativa (5 minutos por tentativa).
+      reset role;
+      update public.avisos set whatsapp_reservado_em = now() - interval '1 hour' where id = a;
+      perform pg_temp.entrar_como_visitante();
+    end loop;
+    select count(*)::text into v from public.reservar_avisos_whatsapp(s) r where r.id = a;
+    reset role;
+    select whatsapp::text || ' ' || whatsapp_tentativas || ' ' || whatsapp_erro into x from public.avisos where id = a;
+    v := v || ' / ' || x;
+    -- b foi reservado pela última chamada acima e ficou sem resultado.
+    update public.avisos set whatsapp_reservado_em = now() - interval '11 minutes' where id = b;
+    perform pg_temp.entrar_como_visitante();
+    select string_agg(r.tentativa::text, ',') into x from public.reservar_avisos_whatsapp(s) r where r.id = b;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Fila do WhatsApp: a terceira falha encerra; reservado sem resultado volta depois de 10 minutos',
+          '0 / falhou 3 erro 3 / 2', v);
+end $$;
+
+-- Aviso velho expira; quem desligou o WhatsApp depois do aviso não recebe.
+do $$ declare v text; x text; a bigint; b bigint; s text := pg_temp.segredo_da_fila(); begin
+  begin
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(1));
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(2));
+    a := pg_temp.aviso(pg_temp.u(1));
+    b := pg_temp.aviso(pg_temp.u(2));
+    perform pg_temp.so_estes_na_fila(array[a, b]);
+    update public.avisos set criado_em = now() - interval '2 days' where id = a;
+    perform pg_temp.agir_como(pg_temp.u(2));
+    perform public.mudar_whatsapp(false);
+    perform pg_temp.entrar_como_visitante();
+    select count(*)::text into v from public.reservar_avisos_whatsapp(s) r where r.id in (a, b);
+    reset role;
+    select string_agg(whatsapp::text, ' / ' order by id) into x from public.avisos where id in (a, b);
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Fila do WhatsApp: aviso com mais de 1 dia expira; quem desligou depois não recebe',
+          '0 / expirado / desligado', v);
+end $$;
+
+-- Nova tentativa só depois da espera: 5 minutos depois da 1ª falha, 10 depois da 2ª
+-- (migration 20261111012620_avisos_auditoria). Uma queda curta da Meta não gasta as 3.
+do $$ declare v text; x text; a bigint; s text := pg_temp.segredo_da_fila(); begin
+  begin
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(1));
+    a := pg_temp.aviso(pg_temp.u(1));
+    perform pg_temp.so_estes_na_fila(array[a]);
+    perform pg_temp.entrar_como_visitante();
+    perform 1 from public.reservar_avisos_whatsapp(s);
+    perform public.registrar_envio_whatsapp(s, a, false, null, 'Meta fora do ar');
+    select count(*)::text into v from public.reservar_avisos_whatsapp(s) r where r.id = a;
+    reset role;
+    update public.avisos set whatsapp_reservado_em = now() - interval '6 minutes' where id = a;
+    perform pg_temp.entrar_como_visitante();
+    select string_agg(r.tentativa::text, ',') into x from public.reservar_avisos_whatsapp(s) r where r.id = a;
+    v := v || ' / ' || x;
+    perform public.registrar_envio_whatsapp(s, a, false, null, 'Meta fora do ar');
+    reset role;
+    update public.avisos set whatsapp_reservado_em = now() - interval '6 minutes' where id = a;
+    perform pg_temp.entrar_como_visitante();
+    select count(*)::text into x from public.reservar_avisos_whatsapp(s) r where r.id = a;
+    v := v || ' / ' || x;
+    reset role;
+    update public.avisos set whatsapp_reservado_em = now() - interval '11 minutes' where id = a;
+    perform pg_temp.entrar_como_visitante();
+    select string_agg(r.tentativa::text, ',') into x from public.reservar_avisos_whatsapp(s) r where r.id = a;
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Fila do WhatsApp: nova tentativa só depois de 5 minutos por tentativa já feita',
+          '0 / 2 / 0 / 3', v);
+end $$;
+
+-- Filtro por destinatário (usado só pelo e2e, para não mexer nos avisos dos outros).
+do $$ declare v text; a bigint; b bigint; s text := pg_temp.segredo_da_fila(); begin
+  begin
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(1));
+    perform pg_temp.proprietario_com_whatsapp(pg_temp.u(2));
+    a := pg_temp.aviso(pg_temp.u(1));
+    b := pg_temp.aviso(pg_temp.u(2));
+    perform pg_temp.so_estes_na_fila(array[a, b]);
+    perform pg_temp.entrar_como_visitante();
+    select string_agg((r.id = a)::text, ',') into v
+    from public.reservar_avisos_whatsapp(s, 20, array[pg_temp.u(1)]) r;
+    reset role;
+    select v || ' / ' || whatsapp::text into v from public.avisos where id = b;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Fila do WhatsApp: com o filtro, só os avisos de quem foi pedido; os outros ficam na fila',
+          'true / pendente', v);
 end $$;
 
 -- ---------------------------------------------------------------

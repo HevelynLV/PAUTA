@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { BotaoSair } from "@/components/BotaoSair";
 import type { EstadoConta } from "@/lib/conta";
 
+import { ChaveWhatsapp } from "./ChaveWhatsapp";
 import { FormConta } from "./FormConta";
 
 // "Minha conta" (ProConta, CorConta e SiteConta): quem é, os dados, os avisos de
@@ -13,6 +14,7 @@ export function TelaConta({
   papel,
   email,
   telefone,
+  whatsappAceito,
   acao,
   children,
 }: {
@@ -20,6 +22,7 @@ export function TelaConta({
   papel: string;
   email: string;
   telefone: string;
+  whatsappAceito: boolean;
   acao: (anterior: EstadoConta, formData: FormData) => Promise<EstadoConta>;
   children?: ReactNode;
 }) {
@@ -45,6 +48,8 @@ export function TelaConta({
       </div>
 
       {children}
+
+      <ChaveWhatsapp aceito={whatsappAceito} />
 
       <FormConta acao={acao} nome={nome} email={email} telefone={telefone} />
 

@@ -12,7 +12,7 @@ import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura } f
 
 const PREFIXO = "e2e-detalhe-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const BALDE = "fotos-imoveis";
 const FAIXA = "preco_min=7772000&preco_max=7772999";
 const TELEFONE_DO_DONO = "48999990070";

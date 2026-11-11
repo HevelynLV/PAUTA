@@ -6,6 +6,7 @@ import { exigirTipo } from "@/lib/auth";
 import { mensagemDoErroDeProposta } from "@/lib/proposta";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Respostas do proprietário às propostas (RF24). O banco confere que a proposta é de um
 // imóvel dele e que a resposta ainda vale (migration 20261105180815_propostas).
@@ -18,6 +19,7 @@ async function responder(funcao: "aceitar_proposta" | "recusar_proposta" | "desf
   const { error } = await supabase.rpc(funcao, { p_proposta: id });
   if (error) return { erro: mensagemDoErroDeProposta(error.hint) };
 
+  avisarPeloWhatsApp();
   revalidatePath("/proprietario");
   revalidatePath("/proprietario/imoveis/[id]", "page");
   return {};

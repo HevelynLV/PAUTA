@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { startTransition, useActionState } from "react";
 
+import { CaixaWhatsapp } from "@/components/conta/CaixaWhatsapp";
 import { Botao } from "@/components/ui/Botao";
 import { Campo } from "@/components/ui/Campo";
 import { CampoTelefone } from "@/components/ui/CampoTelefone";
@@ -92,7 +93,7 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
             erro={erros.email}
           />
           <CampoTelefone
-            dica="Obrigatório. Use um celular: os avisos chegam por WhatsApp neste número."
+            dica="Obrigatório. Use um celular: os avisos de WhatsApp, se você quiser, chegam neste número."
             defaultValue={valores.telefone}
             erro={erros.telefone}
           />
@@ -104,6 +105,7 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
             autoComplete="new-password"
             erro={erros.senha}
           />
+          <CaixaWhatsapp marcada={valores.whatsapp === "sim"} />
         </div>
 
         {estado.erroGeral && (

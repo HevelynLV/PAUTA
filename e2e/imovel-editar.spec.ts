@@ -8,7 +8,7 @@ import { apagarContas, clienteAdmin, criarConta, entrarComo, tornarAdmin } from 
 
 const PREFIXO = "e2e-editar-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 
 type Conta = "dona" | "outra" | "admin";
 const sessoes = {} as Record<Conta, Awaited<ReturnType<typeof entrarComo>>>;

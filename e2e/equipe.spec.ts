@@ -11,7 +11,7 @@ import { apagarContas, clienteAdmin, contaPorEmail, criarConta, entrarComo, muda
 // removido perde o acesso na hora.
 
 const PREFIXO = "e2e-equipe-";
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const unico = () => String(Math.floor(1_000_000 + Math.random() * 8_999_999));
 const email = (nome: string) => `${PREFIXO}${nome}-${unico()}@exemplo.com`;
 

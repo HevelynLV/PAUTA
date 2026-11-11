@@ -14,7 +14,7 @@ test.describe.configure({ timeout: 120_000 });
 
 const PREFIXO = "e2e-visita-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const unico = () => String(Math.floor(10_000 + Math.random() * 89_999));
 
 type Conta = "dono" | "outraDona" | "ana" | "beto" | "cida" | "dani" | "bloqueado";
