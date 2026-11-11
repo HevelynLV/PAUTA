@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { apagarContas, clienteAdmin, criarConta, entrarComo, mudarAssinatura } from "./apoio/supabase";
+import { apagarContas, clienteAdmin, criarConta, entrarComo, esquecerEnviosRecentes, mudarAssinatura } from "./apoio/supabase";
 
 // Operações de proposta ao mesmo tempo (auditoria da Etapa 8). O testar_rls.sql roda numa
 // conexão só e não enxerga isso; aqui cada chamada vai pela API, como dois celulares
@@ -44,6 +44,8 @@ test.beforeAll(async () => {
   }
 });
 
+// A "ana" envia em quase todos os testes: sem isto, passaria do limite de 10 por hora.
+test.afterEach(() => esquecerEnviosRecentes(corretores.map((c) => c.id)));
 test.afterAll(() => apagarContas(PREFIXO));
 
 async function criarImovel() {

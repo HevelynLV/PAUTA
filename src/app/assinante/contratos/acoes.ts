@@ -15,6 +15,7 @@ import {
 } from "@/lib/contrato";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Envio do contrato assinado (RF25). O PDF não passa por aqui (o limite de uma Server
 // Action é 1 MB): o servidor dá um link de envio assinado, o navegador manda o arquivo
@@ -124,6 +125,8 @@ export async function confirmarEnvioDeContrato(
 }
 
 function atualizarTelas() {
+  // Só os dois caminhos de sucesso do envio chamam: o proprietário recebe o aviso.
+  avisarPeloWhatsApp();
   revalidatePath("/assinante/imoveis/[id]", "page");
   revalidatePath("/assinante/negociacoes");
 }

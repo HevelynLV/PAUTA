@@ -29,8 +29,9 @@ export type CampoCadastro = "nome" | "email" | "telefone" | "senha" | "creci" | 
 export type EstadoCadastro = {
   erros: Partial<Record<CampoCadastro, string>>;
   erroGeral?: string;
-  // O que a pessoa digitou (menos a senha), para não perder ao mostrar um erro.
-  valores: Partial<Record<CampoCadastro, string>>;
+  // O que a pessoa digitou (menos a senha), para não perder ao mostrar um erro. Inclui
+  // a caixa do WhatsApp ("sim" quando marcada).
+  valores: Partial<Record<CampoCadastro | "whatsapp", string>>;
   // Com a confirmação de e-mail ligada (Etapa 13), a conta nasce sem sessão.
   confirmarEmail?: string;
 };
@@ -53,6 +54,7 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
     telefone: texto("telefone"),
     creci: assinante ? texto("creci") : "",
     nome_imobiliaria: perfil === "imobiliaria" ? texto("nome_imobiliaria") : "",
+    whatsapp: texto("whatsapp") === "sim" ? "sim" : "",
   };
   const senha = String(formData.get("senha") ?? "");
   const telefone = limparTelefone(valores.telefone);
@@ -87,6 +89,8 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
         telefone,
         ...(assinante && { creci }),
         ...(perfil === "imobiliaria" && { nome_imobiliaria: valores.nome_imobiliaria }),
+        // Consentimento do WhatsApp (Etapa 10): o banco copia para o perfil e apaga a chave.
+        ...(valores.whatsapp === "sim" && { whatsapp: "true" }),
       },
     },
   });

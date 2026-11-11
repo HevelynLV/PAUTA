@@ -276,7 +276,8 @@ export function DecisaoDoContrato({
   );
 }
 
-// AdmVendido e SiteAdmVendido. Sem "foram avisados": os avisos chegam na Etapa 10.
+// AdmVendido e SiteAdmVendido. Os avisos nascem no banco, na mesma operação da venda
+// (migration 20261109234543_avisos_nos_eventos); o WhatsApp só vai para quem aceitou.
 function Vendido({
   titulo,
   venda,
@@ -311,6 +312,7 @@ function Vendido({
           </span>
         ))}
         <span>Visitas pendentes e visitas confirmadas que ainda iam acontecer foram canceladas</span>
+        <span>O proprietário e os corretores foram avisados no app; quem ligou o WhatsApp também recebe por lá</span>
       </div>
 
       <div className="flex flex-col gap-1 rounded-cartao border border-line bg-card p-4">

@@ -23,7 +23,7 @@ export default function ContaProprietario() {
 async function Conteudo() {
   const usuario = await exigirTipo("proprietario");
   const supabase = await criarClienteServidor();
-  const { data: perfil } = await supabase.from("perfis").select("telefone").eq("id", usuario.id).maybeSingle();
+  const { data: perfil } = await supabase.from("perfis").select("telefone, whatsapp_aceito").eq("id", usuario.id).maybeSingle();
 
   return (
     <TelaConta
@@ -31,6 +31,7 @@ async function Conteudo() {
       papel="Proprietário"
       email={usuario.email}
       telefone={formatarTelefone(perfil?.telefone ?? "")}
+      whatsappAceito={perfil?.whatsapp_aceito === true}
       acao={salvarContaProprietario}
     >
       <div className="flex flex-col gap-1 rounded-cartao border border-line bg-card p-4">

@@ -6,6 +6,19 @@ import { defineConfig, devices } from "@playwright/test";
 // ela fica só aqui, no processo dos testes, e nunca vai para o navegador.
 loadEnvConfig(process.cwd());
 
+// Outro endereço quando a porta 3000 já está com outro servidor (ex.: outra conversa):
+// PAUTA_URL=http://localhost:3100 npx playwright test ...
+const ENDERECO = process.env.PAUTA_URL ?? "http://localhost:3000";
+const PORTA = new URL(ENDERECO).port || "3000";
+
+// PAUTA_PROD=1: roda contra o build de produção (next build + next start), que abre
+// cada tela de 30% a 60% mais rápido que o next dev, sem compilar na primeira visita
+// (medido em 10/11/2026). O build vai para a pasta .next-e2e (PAUTA_DIST_DIR, lida no
+// next.config.ts), para não sobrescrever o .next de outro next start aberto.
+// Depois de mudar o código, o build precisa ser refeito: com PAUTA_PROD=1 e sem
+// servidor aberto na porta, o próprio Playwright faz o build de novo.
+const PRODUCAO = process.env.PAUTA_PROD === "1";
+
 export default defineConfig({
   testDir: "./e2e",
   // Um teste por vez: todos usam o mesmo banco compartilhado do Supabase.
@@ -19,7 +32,7 @@ export default defineConfig({
   // bastavam. Um erro de verdade continua falhando, só demora mais para avisar.
   expect: { timeout: 15_000 },
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: ENDERECO,
     trace: "on-first-retry",
     locale: "pt-BR",
     timezoneId: "America/Sao_Paulo",
@@ -31,10 +44,15 @@ export default defineConfig({
     { name: "computador", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000",
-    // Reaproveita o npm run dev que já estiver aberto.
+    command: PRODUCAO ? `npx next build && npx next start -p ${PORTA}` : `npx next dev -p ${PORTA}`,
+    // WHATSAPP_DESLIGADO: o servidor dos testes lê o .env.local; sem isto, com as chaves da
+    // Meta lá, os avisos das contas de teste iriam para a Meta de verdade (números
+    // inventados). O envio é testado com a Meta simulada, em e2e/whatsapp.spec.ts.
+    env: { WHATSAPP_DESLIGADO: "1", ...(PRODUCAO ? { PAUTA_DIST_DIR: ".next-e2e" } : {}) },
+    url: ENDERECO,
+    // Reaproveita o servidor que já estiver aberto no endereço (dev ou produção).
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // O build de produção leva alguns minutos.
+    timeout: PRODUCAO ? 600_000 : 120_000,
   },
 });

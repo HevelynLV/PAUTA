@@ -7,6 +7,7 @@ import { mensagemDoErroDeContrato, TAMANHO_DO_MOTIVO } from "@/lib/contrato";
 import { lerNumero } from "@/lib/imovel";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { idValido } from "@/lib/validacao";
+import { avisarPeloWhatsApp } from "@/lib/whatsapp";
 
 // Conferência do contrato pelo admin (RF26, RF32, RNF05). Quem decide de verdade são as
 // funções do banco aprovar_contrato() e recusar_contrato(), que conferem de novo se quem
@@ -53,6 +54,7 @@ export async function aprovarContrato(
   });
   if (error) return resultadoDoErro(error.hint);
 
+  avisarPeloWhatsApp();
   atualizarTelas();
   return { aprovado: true };
 }
@@ -68,6 +70,7 @@ export async function recusarContrato(id: string, motivo: string): Promise<Resul
   const { error } = await supabase.rpc("recusar_contrato", { p_contrato: id, p_motivo: texto });
   if (error) return resultadoDoErro(error.hint);
 
+  avisarPeloWhatsApp();
   atualizarTelas();
   return { recusado: true };
 }

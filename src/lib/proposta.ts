@@ -81,6 +81,8 @@ export function mensagemDoErroDeProposta(hint: string | null | undefined) {
       return "Esta proposta não pode mais ser alterada. Recarregue a página.";
     case "proposta_nao_encontrada":
       return "Proposta não encontrada. Recarregue a página.";
+    case "limite_por_hora":
+      return "Você enviou muitas propostas na última hora. Tente de novo mais tarde.";
     default:
       return "Não foi possível concluir. Tente de novo.";
   }

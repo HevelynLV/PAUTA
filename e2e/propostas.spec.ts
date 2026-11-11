@@ -15,7 +15,7 @@ test.describe.configure({ timeout: 120_000 });
 
 const PREFIXO = "e2e-proposta-";
 const email = (nome: string) => `${PREFIXO}${nome}@exemplo.com`;
-const ORIGEM = "http://localhost:3000";
+const ORIGEM = process.env.PAUTA_URL ?? "http://localhost:3000";
 const unico = () => String(Math.floor(10_000 + Math.random() * 89_999));
 const TELEFONE_DA_DONA = "48999990090";
 
@@ -194,11 +194,15 @@ test("duas propostas aceitas deixam o imóvel em negociação, até a última de
   await expect(daAna).toContainText("(48) 99999-0092");
   await expect(daAna).toContainText(email("ana"));
 
+  // "Aceita" sozinho também casa com o botão "Aceitar": espera o botão sumir, sinal de que
+  // a action terminou, antes de a corretora abrir o imóvel (era a falha instável do 10.3b).
   await daAna.getByRole("button", { name: "Aceitar" }).click();
+  await expect(daAna.getByRole("button", { name: "Aceitar" })).toHaveCount(0);
   await expect(daAna).toContainText("Aceita");
   await selo("Em negociação");
 
   await doBeto.getByRole("button", { name: "Aceitar" }).click();
+  await expect(doBeto.getByRole("button", { name: "Aceitar" })).toHaveCount(0);
   await expect(doBeto).toContainText("Aceita");
   await selo("Em negociação");
 
@@ -216,9 +220,11 @@ test("duas propostas aceitas deixam o imóvel em negociação, até a última de
   // Desfazer uma mantém o selo; desfazer a última tira.
   await dono.goto(paginaDasPropostas(imovel));
   await daAna.getByRole("button", { name: "Desfazer aceite" }).click();
+  await expect(daAna.getByRole("button", { name: "Desfazer aceite" })).toHaveCount(0);
   await expect(daAna).toContainText("Nova");
   await selo("Em negociação");
   await doBeto.getByRole("button", { name: "Desfazer aceite" }).click();
+  await expect(doBeto.getByRole("button", { name: "Desfazer aceite" })).toHaveCount(0);
   await expect(doBeto).toContainText("Nova");
   await selo("Disponível");
 

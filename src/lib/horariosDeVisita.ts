@@ -155,6 +155,8 @@ export function mensagemDoErroDeVisita(hint: string | null | undefined) {
       return "Esta visita não pode mais ser cancelada. Recarregue a página.";
     case "visita_nao_encontrada":
       return "Visita não encontrada. Recarregue a página.";
+    case "limite_por_hora":
+      return "Você pediu muitas visitas na última hora. Tente de novo mais tarde.";
     default:
       return "Não foi possível concluir. Tente de novo.";
   }

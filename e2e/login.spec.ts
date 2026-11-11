@@ -123,12 +123,15 @@ test("quem só está logado não troca a senha sem o link", async ({ page }) => 
   await expect(page.getByLabel("Senha nova", { exact: true })).toHaveCount(0);
 });
 
+// O endereço inteiro, com a porta: o link forjado não pode levar a outro site.
+const REDEFINIR_NO_PAUTA = new RegExp(`^${(process.env.PAUTA_URL ?? "http://localhost:3000").replace(/[.]/g, "\\.")}/redefinir-senha$`);
+
 test("link forjado não abre sessão nem leva para fora do PAUTA", async ({ page }) => {
   await page.goto("/auth/confirmar?token_hash=forjado&type=recovery&proximo=//exemplo.com");
-  await expect(page).toHaveURL(/^http:\/\/localhost:3000\/redefinir-senha$/);
+  await expect(page).toHaveURL(REDEFINIR_NO_PAUTA);
   await expect(page.getByRole("heading", { name: "Link vencido" })).toBeVisible();
 
   // TAB escondido (%09): o navegador o apaga e "/\t/exemplo.com" viraria outro site.
   await page.goto("/auth/confirmar?token_hash=forjado&type=recovery&proximo=/%09/exemplo.com");
-  await expect(page).toHaveURL(/^http:\/\/localhost:3000\/redefinir-senha$/);
+  await expect(page).toHaveURL(REDEFINIR_NO_PAUTA);
 });
