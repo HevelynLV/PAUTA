@@ -2,11 +2,18 @@
 
 ## Onde paramos
 
-Última atualização: 11/11/2026 · por Hevelyn
-Etapa atual: 10. Avisos, **fechada** (passo 10.5), na branch `etapa-10-avisos`, à espera do commit, do push e do Pull Request.
-Próximo: abrir o Pull Request da `etapa-10-avisos` para a `main` e, depois do merge, decidir o preço da mensalidade (decisão em aberto que trava a Etapa 11, cobrança). A Etapa 12 também está travada: falta decidir a antecedência do aviso e o prazo da renovação da exclusividade. Use o prompt "Antes da Etapa 1: decisões em aberto" do `docs/prompts.md` para preparar a decisão.
+Última atualização: 19/11/2026 · por Hevelyn
+Etapa atual: 11. Cobrança, passo 11.2a feito em 19/11/2026. A Etapa 10 entrou na `main` (Pull Request #12).
+Próximo: informar os valores provisórios de teste da imobiliária e do autônomo e seguir para o 11.2b (cliente e assinatura no Asaas ao ativar). Decisões do plano na Visão geral, "Decisões tomadas em 19/11/2026 (plano da Etapa 11)".
 
 Etapa 10, em resumo: cada evento do fluxo (imóvel aprovado ou reprovado, visita, proposta, contrato, venda, conta ativada e corretor novo) gera um aviso na lista de avisos do app, com o número de não vistos no menu. Quem aceitar recebe também pelo WhatsApp: a caixa fica no cadastro e no convite, e a chave em Minha conta. O envio sai por uma fila no banco, protegida por um segredo, depois da resposta da tela. Como o número de teste da Meta não entrega no Brasil, o envio foi testado com a Meta simulada; a entrega de verdade fica para o piloto. A auditoria não achou nada crítico: os 6 achados importantes e as melhorias possíveis foram corrigidos, e o que depende de decisão ou de outra etapa foi para "Pendências" (Etapas 12 e 13).
+
+Etapa 11:
+- 11.1 feito (19/11/2026, Hevelyn): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 13/11/2026" e "em 19/11/2026 (plano da Etapa 11)") e no CLAUDE.md. Passos: 11.2a migration `cobranca` (planos, cobranças, eventos do Asaas, CPF/CNPJ, corte 3 dias depois do vencimento em `eh_assinante_ativo()`) e CPF/CNPJ no cadastro; 11.2b cliente e assinatura no Asaas ao ativar; 11.2c tela Pagamento; 11.3a webhook; 11.3b testes com o Asaas simulado e roteiro no sandbox
+- 11.2a feito (19/11/2026, Hevelyn): migrations `20261119130600_cobranca_tipos_de_aviso` e `20261119130626_cobranca` aplicadas (ver "Atenção"), com o segredo `pauta_asaas` no Vault. Antes, ensaiadas numa transação desfeita. `testar_rls.sql`: 389 de 389 no banco real (9 testes novos na seção 23). Os avisos novos ficam numa migration à parte porque o Postgres não deixa usar um valor novo de enum na mesma transação
+  - Banco: tabelas `planos` (sem valor ainda), `dados_de_cobranca` (CPF ou CNPJ, inclusive o alfanumérico, e os ids do Asaas; só o responsável e o admin leem), `cobrancas` e `eventos_asaas`; `mensalidade_atrasada()` e `assinatura_com_acesso()` (o corte 3 dias depois do vencimento) usadas por `eh_assinante_ativo()`, `inicio_dos_avisos_para_assinantes()`, `convite_valido()`, `dados_do_convite()` e o cadastro; `informar_documento()` para as contas antigas; com o segredo `pauta_asaas`: `dados_para_cobrar()`, `registrar_assinatura_asaas()` e `registrar_evento_asaas()` (idempotente, paga não volta atrás); avisos `mensalidade_paga` e `mensalidade_vencida`
+  - App: campo "CNPJ da imobiliária" / "Seu CPF ou CNPJ" no cadastro, conferido na tela e no servidor (`documento_disponivel()` antes do cadastro), CPF/CNPJ na tela de assinantes do admin e os textos dos dois avisos (o link `/assinante/pagamento` só existe no 11.2c). `e2e/cadastro.spec.ts` (teste novo do documento) e `e2e/autonomo.spec.ts` preenchem o campo. Lint e tipos passam; `cadastro.spec.ts` e `autonomo.spec.ts`: 18 de 18. Suíte e2e completa interrompida (lenta): 14 falhas, quase todas por tempo esgotado e uma `fetch failed` no Supabase, em `visitas`, `equipe`, `imovel-aprovar`, `imovel-editar` e `admin-assinantes`. **Pendente:** rodar esses 5 arquivos sozinhos antes do 11.2b, para confirmar que é lentidão e não efeito do 11.2a
+  - Fica para o 11.2c: a conta antiga (sem documento) informa o CPF ou CNPJ na tela de aguardando ativação ou de pagamento. Contas criadas antes do 11.2a não têm documento, e a cobrança delas não é criada até ele ser informado
 
 Etapa 10:
 - 10.1 feito (09/11/2026, Hevelyn): plano aprovado. Decisões na Visão geral ("Decisões tomadas em 09/11/2026 (plano da Etapa 10)") e no CLAUDE.md
@@ -442,11 +449,7 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - Next.js 16.4.2 (só no `npm run dev`): enviar o formulário do cadastro sem JavaScript (antes de a página carregar) dá `InvariantError: Received an underlying cookies object that does not match either cookies or mutableCookies`, que o próprio Next chama de bug dele. Com JavaScript (o normal), funciona. Conferir de novo com o `npm run build` + `npm start` e, se continuar, abrir um aviso no Next
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
 - Etapa 11:
-  - (plano da Etapa 10) Aviso "mensalidade paga", pelo mesmo `criar_aviso()`
-  - Preço da mensalidade (igual para imobiliária e corretor autônomo?)
-  - **(banco)** O pagamento da mensalidade vem antes ou depois de o admin ativar a assinatura?
-  - O que acontece com as visitas de um assinante com acesso suspenso (propostas: decidido no plano da Etapa 8, não mudam e o proprietário segue respondendo)
-  - Contato da equipe PAUTA que aparece para o assinante bloqueado
+  - Valores provisórios de teste da mensalidade (imobiliária e autônomo), antes do 11.2b: a Hevelyn informa
 - Etapa 12:
   - (plano da Etapa 10) Aviso de vencimento da exclusividade: proprietário pela lista e WhatsApp; admin no painel (sem lista). O cron da etapa pode também varrer a fila do WhatsApp
   - (auditoria da Etapa 10) O cron precisa rodar a fila do WhatsApp: hoje ela só anda quando alguém usa uma action, e um aviso que falhou pode passar de 1 dia sem nova tentativa e expirar. Se o cron recusar propostas ou contratos ao vencer a exclusividade, o aviso sai como recusa comum: só `aprovar_contrato()` marca a venda (`imovel_em_venda()`); um motivo novo pede outra marca
@@ -455,6 +458,9 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - **(banco)** O que acontece com as propostas aceitas se a exclusividade vencer com o imóvel em negociação
   - **(banco)** (plano da Etapa 9) Exclusividade que vence com contrato em análise: `aprovar_contrato()` exige o imóvel `disponivel` e falharia, embora o contrato assinado seja uma venda real. Confirmar também que `remover_corretor()` pode seguir cancelando as propostas de imóvel `expirado`
 - Etapa 13:
+  - (decisão de 13/11/2026) Valores reais da mensalidade da imobiliária e do autônomo, no lugar dos provisórios da Etapa 11. As assinaturas já criadas no Asaas guardam o valor antigo: atualizar o valor delas também
+  - (plano da Etapa 11) Contato da equipe PAUTA (`CONTATO_EQUIPE_PAUTA`) na Vercel; webhook do Asaas apontando para produção; desligar as notificações do próprio Asaas que duplicam os avisos (deixar o e-mail da fatura)
+  - (plano da Etapa 11) LGPD (13.4): o CPF/CNPJ dos assinantes entra na anonimização
   - (auditoria da Etapa 10) Modelo da Meta: `aviso_pauta`, com o corpo inteiro em dois parâmetros, tende a ser recusado (a Meta não aceita modelo quase só de variáveis). Provável: um modelo por grupo de evento. Não conferido na documentação da Meta
   - (auditoria da Etapa 10) WhatsApp duplicado: se a Meta aceita e a gravação do resultado falha, o aviso volta em 10 minutos e sai de novo. O prazo de 30 s da fila diminui o risco; com o número de verdade, guardar um controle antes de enviar
   - (auditoria da Etapa 10) Decidir e registrar na Visão geral: o corretor vê o valor final no aviso "contrato aprovado" (a decisão de 06/11 só cita admin e proprietário); assinante bloqueado ou vencido continua recebendo WhatsApp dos avisos pessoais; pedir e cancelar visita pode gerar até 40 avisos por hora para um dono (custo do WhatsApp)
@@ -522,6 +528,7 @@ Lições do Captador (problemas já encontrados no projeto antigo; tratar desde 
 - Etapa 1 (PAUTA): o `npm run dev` guarda um cache em disco (`.next/dev`). Depois de mudar o `globals.css`, ele continuou servindo o CSS antigo mesmo reiniciado. Se uma mudança não aparecer no navegador: pare o `npm run dev`, apague a pasta `.next/dev` e rode de novo
 
 Atenção (algo que a próxima pessoa precisa saber):
+- **Etapa 11, migrations novas** (`20261119130600_cobranca_tipos_de_aviso` e `20261119130626_cobranca`, de 19/11/2026, branch `etapa-11-cobranca`): já aplicadas no Supabase compartilhado, e o segredo `pauta_asaas` já está no Vault. Depois do `git pull`, confira com `npx supabase migration list` e peça à Hevelyn, por mensagem particular (nunca pelo GitHub), o valor de `ASAAS_SEGREDO` para o `.env.local` (README, passo 4). Mudou: o cadastro de imobiliária e de autônomo pede CPF ou CNPJ (teste que cadastra assinante pela tela precisa preencher; pela API, o banco ainda aceita sem); o acesso cai também com mensalidade vencida há mais de 3 dias
 - **Variáveis novas do WhatsApp no `.env.local`** (Etapa 10, 10/11/2026). Sem elas o app funciona: o WhatsApp é pulado e o aviso no app é criado do mesmo jeito. Para ter o WhatsApp:
   1. Peça à Hevelyn, por mensagem particular (nunca pelo GitHub), o valor de `WHATSAPP_FILA_SEGREDO`: é o mesmo para as duas pessoas, porque o banco é um só (o segredo `pauta_whatsapp_fila` já está no Vault)
   2. `WHATSAPP_TOKEN` e `WHATSAPP_NUMERO_ID` são pessoais, do seu próprio app de teste da Meta (README, passo 4). O número de teste não entrega para celulares do Brasil (erro 130497): até o piloto, o envio é testado só com a Meta simulada (`e2e/whatsapp.spec.ts`, que precisa do `WHATSAPP_FILA_SEGREDO`)
@@ -602,6 +609,8 @@ Toda migration nova entra aqui assim que for aplicada e o `testar_rls.sql` passa
 - `20261109234543_avisos_nos_eventos` · 09/11/2026 · Hevelyn · gatilhos que criam os avisos de cada evento (imóvel, visita, proposta, contrato, venda, ativação e corretor novo) e o limite de 10 propostas e 20 pedidos de visita por corretor por hora. `testar_rls.sql`: 370 de 370
 - `20261111000433_avisos_whatsapp` · 10/11/2026 · Hevelyn · fila do WhatsApp: `reservar_avisos_whatsapp()` e `registrar_envio_whatsapp()`, só com o segredo `pauta_whatsapp_fila` do Vault; coluna `avisos.whatsapp_reservado_em`. `testar_rls.sql`: 375 de 375
 - `20261111012620_avisos_auditoria` · 10/11/2026 · Hevelyn · correções da auditoria da Etapa 10: venda reconhecida por `imovel_em_venda()` (marca local de `aprovar_contrato()`), nova tentativa do WhatsApp com espera, uma reserva por vez, filtro `p_destinatarios`, trava no limite por hora e índice `avisos_criado_em_idx`. `testar_rls.sql`: 379 de 379
+- `20261119130600_cobranca_tipos_de_aviso` · 19/11/2026 · Hevelyn · avisos `mensalidade_paga` e `mensalidade_vencida` (à parte, por causa do enum)
+- `20261119130626_cobranca` · 19/11/2026 · Hevelyn · `planos`, `dados_de_cobranca` (CPF/CNPJ), `cobrancas`, `eventos_asaas`, corte 3 dias depois do vencimento em `eh_assinante_ativo()`, funções do Asaas com o segredo `pauta_asaas` e avisos da mensalidade. `testar_rls.sql`: 389 de 389
 - `20261106221451_contratos` · 06/11/2026 · Hevelyn · tabelas `contratos` e `vendas`, bucket privado `contratos`, `enviar_contrato()`, `aprovar_contrato()` (operação atômica), `recusar_contrato()`, `definir_comissao_paga()`, leituras do admin e ajustes em `desfazer_aceite()`, `cancelar_proposta()`, `remover_corretor()` e nas leituras de propostas. `testar_rls.sql`: 347 de 347
 
 ## Etapas do MVP

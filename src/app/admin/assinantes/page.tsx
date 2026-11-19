@@ -6,6 +6,7 @@ import { listaDeAssinantes, type AssinanteNaLista, type Situacao } from "@/lib/a
 import { exigirTipo } from "@/lib/auth";
 import { formatarTelefone } from "@/lib/conta";
 import { formatarData } from "@/lib/imovel";
+import { formatarDocumento } from "@/lib/validacao";
 
 import { AcoesDoAssinante } from "./AcoesDoAssinante";
 
@@ -90,6 +91,7 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
                   {a.tipo === "imobiliaria" ? "Imobiliária" : "Corretor autônomo"} ·{" "}
                   <CreciEmDestaque creci={a.creci} />
                 </span>
+                <span className="text-tiny text-ink2">{documento(a.documento)}</span>
                 <span className="text-tiny text-ink2">{informacoes(a)}</span>
                 {a.situacao === "pendente" && (
                   <a href={SITE_CRECI_SC} target="_blank" rel="noopener noreferrer" className="text-small font-bold text-mar-dark underline">
@@ -136,6 +138,8 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
                     <td className="px-4 py-3">
                       <CreciEmDestaque creci={a.creci} />
                       <br />
+                      <span className="text-tiny text-ink2">{documento(a.documento)}</span>
+                      <br />
                       <a href={SITE_CRECI_SC} target="_blank" rel="noopener noreferrer" className="text-tiny font-bold text-mar-dark underline">
                         Conferir no CRECI-SC
                       </a>
@@ -167,6 +171,11 @@ async function Conteudo({ searchParams }: { searchParams: Promise<Record<string,
 // O CRECI é o que o admin confere à mão: em negrito, com a UF (sempre SC).
 function CreciEmDestaque({ creci }: { creci: string }) {
   return <b className="font-bold text-ink">CRECI {creci} SC</b>;
+}
+
+// Para a cobrança (Etapa 11). Conta antiga sem o número: o responsável informa depois.
+function documento(numero: string | null) {
+  return numero ? formatarDocumento(numero) : "Sem CPF ou CNPJ";
 }
 
 function corretores(n: number) {

@@ -32,6 +32,26 @@ export async function criarConta(email: string, dados: Record<string, string>) {
   return data.user.id;
 }
 
+// CPF ou CNPJ válido e aleatório para o cadastro (o banco não aceita repetido). Os
+// dígitos verificadores seguem a regra do documentoValido() de src/lib/validacao.ts.
+export function documentoDeTeste(tipo: "cpf" | "cnpj") {
+  const sorteio = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join("");
+  let v = tipo === "cpf" ? sorteio(9) : `${sorteio(8)}0001`;
+  for (let d = 0; d < 2; d++) {
+    let soma = 0;
+    if (tipo === "cpf") {
+      for (let i = 0; i < v.length; i++) soma += Number(v[i]) * (v.length + 1 - i);
+      const dv = (soma * 10) % 11;
+      v += String(dv === 10 ? 0 : dv);
+    } else {
+      for (let i = 0; i < v.length; i++) soma += Number(v[i]) * (2 + ((v.length - 1 - i) % 8));
+      const resto = soma % 11;
+      v += String(resto < 2 ? 0 : 11 - resto);
+    }
+  }
+  return v;
+}
+
 export async function contaPorEmail(email: string) {
   const { data, error } = await clienteAdmin().auth.admin.listUsers({ perPage: 1000 });
   if (error) throw error;
