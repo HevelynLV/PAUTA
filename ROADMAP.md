@@ -3,8 +3,8 @@
 ## Onde paramos
 
 Última atualização: 19/11/2026 · por Hevelyn
-Etapa atual: 11. Cobrança, passo 11.2a feito em 19/11/2026. A Etapa 10 entrou na `main` (Pull Request #12).
-Próximo: informar os valores provisórios de teste da imobiliária e do autônomo e seguir para o 11.2b (cliente e assinatura no Asaas ao ativar). Decisões do plano na Visão geral, "Decisões tomadas em 19/11/2026 (plano da Etapa 11)".
+Etapa atual: 11. Cobrança, passo 11.2a feito em 19/11/2026 e enviado para o GitHub no meio da etapa (a etapa ainda não está pronta, sem Pull Request). A Etapa 10 entrou na `main` (Pull Request #12).
+Próximo: (1) rodar sozinhos `npx playwright test e2e/visitas.spec.ts e2e/equipe.spec.ts e2e/imovel-aprovar.spec.ts e2e/imovel-editar.spec.ts e2e/admin-assinantes.spec.ts`, que estouraram o tempo na suíte completa; (2) informar os valores provisórios de teste da imobiliária e do autônomo; (3) seguir para o 11.2b (cliente e assinatura no Asaas ao ativar). Decisões do plano na Visão geral, "Decisões tomadas em 19/11/2026 (plano da Etapa 11)".
 
 Etapa 10, em resumo: cada evento do fluxo (imóvel aprovado ou reprovado, visita, proposta, contrato, venda, conta ativada e corretor novo) gera um aviso na lista de avisos do app, com o número de não vistos no menu. Quem aceitar recebe também pelo WhatsApp: a caixa fica no cadastro e no convite, e a chave em Minha conta. O envio sai por uma fila no banco, protegida por um segredo, depois da resposta da tela. Como o número de teste da Meta não entrega no Brasil, o envio foi testado com a Meta simulada; a entrega de verdade fica para o piloto. A auditoria não achou nada crítico: os 6 achados importantes e as melhorias possíveis foram corrigidos, e o que depende de decisão ou de outra etapa foi para "Pendências" (Etapas 12 e 13).
 
@@ -450,6 +450,7 @@ Pendências e decisões em aberto (cada uma precisa estar resolvida antes da eta
   - Rascunhos de imóvel abandonados: apagar sozinhos depois de alguns dias? Sugestão do plano: deixar para a Etapa 13
 - Etapa 11:
   - Valores provisórios de teste da mensalidade (imobiliária e autônomo), antes do 11.2b: a Hevelyn informa
+  - e2e (19/11/2026): na suíte completa, `visitas`, `equipe`, `imovel-aprovar`, `imovel-editar` e `admin-assinantes` falharam por tempo esgotado (e um `fetch failed` no Supabase). Rodar esses arquivos sozinhos antes do 11.2b para confirmar que é lentidão e não efeito do corte novo em `eh_assinante_ativo()`
 - Etapa 12:
   - (plano da Etapa 10) Aviso de vencimento da exclusividade: proprietário pela lista e WhatsApp; admin no painel (sem lista). O cron da etapa pode também varrer a fila do WhatsApp
   - (auditoria da Etapa 10) O cron precisa rodar a fila do WhatsApp: hoje ela só anda quando alguém usa uma action, e um aviso que falhou pode passar de 1 dia sem nova tentativa e expirar. Se o cron recusar propostas ou contratos ao vencer a exclusividade, o aviso sai como recusa comum: só `aprovar_contrato()` marca a venda (`imovel_em_venda()`); um motivo novo pede outra marca
@@ -672,3 +673,4 @@ PAUTA (antes, Domora):
 - 09/11/2026 · Hevelyn · Decisão: WhatsApp pela Meta direto (Cloud API), com o número de teste gratuito até o piloto
 - 10/11/2026 · Hevelyn · Etapa 10, passos 10.1 a 10.3: avisos no app (tabela `avisos`, gatilhos por evento, telas e número no menu), consentimento do WhatsApp e fila do WhatsApp com a Meta simulada (o número de teste não entrega no Brasil)
 - 11/11/2026 · Hevelyn · Etapa 10, passos 10.4 e 10.5: auditoria (nada crítico) e correções (migration `avisos_auditoria`: venda reconhecida pela própria operação, nova tentativa do WhatsApp com espera, e2e sem WhatsApp de verdade). Etapa 10 fechada
+- 19/11/2026 · Hevelyn · Etapa 11, passos 11.1 e 11.2a: modelo da mensalidade decidido (dois preços, cobrança depois da ativação, valores provisórios), plano aprovado, migrations `cobranca_tipos_de_aviso` e `cobranca` (planos, CPF/CNPJ, cobranças, eventos do Asaas, corte 3 dias depois do vencimento) e CPF/CNPJ no cadastro e no admin. `testar_rls.sql`: 389 de 389
