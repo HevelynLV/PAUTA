@@ -5,10 +5,13 @@ import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import {
   creciValido,
+  documentoServePara,
   emailValido,
   erroDoCreci,
+  erroDoDocumento,
   ERRO_TELEFONE,
   limparCreci,
+  limparDocumento,
   limparTelefone,
   nomeValido,
   PERFIS_CADASTRO,
@@ -24,7 +27,7 @@ import {
 // options.data. O banco não aceita admin nem corretor sem convite, e ignora
 // status ou assinante_id mandados por alguém que altere a requisição (RNF03).
 
-export type CampoCadastro = "nome" | "email" | "telefone" | "senha" | "creci" | "nome_imobiliaria";
+export type CampoCadastro = "nome" | "email" | "telefone" | "senha" | "creci" | "nome_imobiliaria" | "cpf_cnpj";
 
 export type EstadoCadastro = {
   erros: Partial<Record<CampoCadastro, string>>;
@@ -38,6 +41,8 @@ export type EstadoCadastro = {
 
 const MENSAGEM_CRECI_REPETIDO =
   "Este CRECI já está cadastrado no PAUTA. Se ele é seu, fale com a equipe PAUTA.";
+const MENSAGEM_DOCUMENTO_REPETIDO =
+  "Este CPF ou CNPJ já está cadastrado no PAUTA. Se ele é seu, fale com a equipe PAUTA.";
 
 export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): Promise<EstadoCadastro> {
   const texto = (campo: string) => String(formData.get(campo) ?? "").trim();
@@ -53,12 +58,14 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
     email: texto("email").toLowerCase(),
     telefone: texto("telefone"),
     creci: assinante ? texto("creci") : "",
+    cpf_cnpj: assinante ? texto("cpf_cnpj") : "",
     nome_imobiliaria: perfil === "imobiliaria" ? texto("nome_imobiliaria") : "",
     whatsapp: texto("whatsapp") === "sim" ? "sim" : "",
   };
   const senha = String(formData.get("senha") ?? "");
   const telefone = limparTelefone(valores.telefone);
   const creci = limparCreci(valores.creci);
+  const documento = limparDocumento(valores.cpf_cnpj);
 
   const erros: EstadoCadastro["erros"] = {};
   if (!nomeValido(valores.nome)) erros.nome = "Escreva o nome (de 2 a 120 letras).";
@@ -69,6 +76,9 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
     erros.nome_imobiliaria = "Escreva o nome da imobiliária.";
   }
   if (perfil !== "proprietario" && !creciValido(creci, perfil)) erros.creci = erroDoCreci(creci, perfil);
+  if (perfil !== "proprietario" && !documentoServePara(documento, perfil)) {
+    erros.cpf_cnpj = erroDoDocumento(documento, perfil);
+  }
   if (Object.keys(erros).length > 0) return { erros, valores };
 
   const supabase = await criarClienteServidor();
@@ -77,6 +87,9 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
   // 3.2a). Por isso a pergunta vem antes; o unique do banco continua valendo.
   if (assinante && !(await creciLivre(supabase, creci))) {
     return { erros: { creci: MENSAGEM_CRECI_REPETIDO }, valores };
+  }
+  if (assinante && !(await documentoLivre(supabase, documento))) {
+    return { erros: { cpf_cnpj: MENSAGEM_DOCUMENTO_REPETIDO }, valores };
   }
 
   const { data, error } = await supabase.auth.signUp({
@@ -87,7 +100,7 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
         tipo: perfil,
         nome: valores.nome,
         telefone,
-        ...(assinante && { creci }),
+        ...(assinante && { creci, cpf_cnpj: documento }),
         ...(perfil === "imobiliaria" && { nome_imobiliaria: valores.nome_imobiliaria }),
         // Consentimento do WhatsApp (Etapa 10): o banco copia para o perfil e apaga a chave.
         ...(valores.whatsapp === "sim" && { whatsapp: "true" }),
@@ -113,6 +126,9 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
     if (assinante && !(await creciLivre(supabase, creci))) {
       return { erros: { creci: MENSAGEM_CRECI_REPETIDO }, valores };
     }
+    if (assinante && !(await documentoLivre(supabase, documento))) {
+      return { erros: { cpf_cnpj: MENSAGEM_DOCUMENTO_REPETIDO }, valores };
+    }
     return { erros: {}, valores, erroGeral: "Não foi possível criar a conta. Confira os dados e tente de novo." };
   }
 
@@ -126,6 +142,12 @@ export async function cadastrar(_anterior: EstadoCadastro, formData: FormData): 
 
 async function creciLivre(supabase: Awaited<ReturnType<typeof criarClienteServidor>>, creci: string) {
   const { data, error } = await supabase.rpc("creci_disponivel", { p_creci: creci });
+  // Na dúvida (erro de rede), deixa seguir: o unique do banco barra o repetido.
+  return error ? true : data === true;
+}
+
+async function documentoLivre(supabase: Awaited<ReturnType<typeof criarClienteServidor>>, documento: string) {
+  const { data, error } = await supabase.rpc("documento_disponivel", { p_documento: documento });
   // Na dúvida (erro de rede), deixa seguir: o unique do banco barra o repetido.
   return error ? true : data === true;
 }

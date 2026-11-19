@@ -32,7 +32,9 @@ export type TipoAviso =
   | "contrato_recusado_pela_venda"
   | "imovel_novo"
   | "assinatura_ativada"
-  | "corretor_entrou";
+  | "corretor_entrou"
+  | "mensalidade_paga"
+  | "mensalidade_vencida";
 
 // O que o banco guarda em avisos.dados. Cada tipo usa só uma parte.
 export type DadosDoAviso = {
@@ -48,6 +50,10 @@ export type DadosDoAviso = {
   motivo?: string;
   exclusividade_fim?: string;
   nome?: string;
+  // Mensalidade (Etapa 11): datas sem hora, "2026-11-22".
+  valor_centavos?: number;
+  vencimento?: string;
+  acesso_ate?: string;
 };
 
 export type Aviso = {
@@ -278,7 +284,34 @@ export function textoDoAviso(tipo: TipoAviso, d: DadosDoAviso): TextoDoAviso {
         icone: "equipe",
         cor: "areia",
       };
+    case "mensalidade_paga":
+      return {
+        titulo: "Mensalidade paga",
+        texto: `Recebemos ${centavos(d.valor_centavos)}da mensalidade com vencimento em ${dataSemHora(d.vencimento)}.`,
+        icone: "ok",
+        cor: "mar",
+      };
+    case "mensalidade_vencida":
+      return {
+        titulo: "Mensalidade vencida",
+        texto: `A mensalidade ${centavos(d.valor_centavos)}venceu em ${dataSemHora(d.vencimento)}. Pague até ${dataSemHora(d.acesso_ate)} para não perder o acesso ao catálogo.`,
+        icone: "fechar",
+        cor: "erro",
+        acao: "Toque para pagar",
+      };
   }
+}
+
+// "R$ 199,90 " (com o espaço), ou nada sem o valor.
+function centavos(valor: number | undefined) {
+  return typeof valor === "number" ? `${formatarPreco(valor / 100)} ` : "";
+}
+
+// "2026-11-22" → "22/11/2026". Data sem hora: new Date() a leria como meia-noite em UTC,
+// que em Florianópolis ainda é o dia anterior.
+function dataSemHora(data: string | undefined) {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data ?? "");
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : "a data combinada";
 }
 
 function maiuscula(texto: string) {

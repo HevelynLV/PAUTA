@@ -74,6 +74,18 @@ export function FormCadastro({ perfil }: { perfil: PerfilCadastro }) {
             erro={erros.creci}
           />
         )}
+        {assinante && (
+          <Campo
+            name="cpf_cnpj"
+            rotulo={perfil === "imobiliaria" ? "CNPJ da imobiliária" : "Seu CPF ou CNPJ"}
+            placeholder={perfil === "imobiliaria" ? "12.345.678/0001-95" : "123.456.789-09"}
+            dica="Para a cobrança da mensalidade, que só começa depois que a assinatura é ativada. Os corretores não veem este número."
+            autoCapitalize="characters"
+            autoComplete="off"
+            defaultValue={valores.cpf_cnpj}
+            erro={erros.cpf_cnpj}
+          />
+        )}
         <div className="grid gap-3.5 md:grid-cols-2 md:gap-4">
           <Campo
             name="nome"

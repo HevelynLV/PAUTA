@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { apagarContas, clienteAdmin, contaPorEmail, criarConta, entrarComo, tornarAdmin } from "./apoio/supabase";
+import { apagarContas, clienteAdmin, contaPorEmail, criarConta, documentoDeTeste, entrarComo, tornarAdmin } from "./apoio/supabase";
 
 // RF06, passo 5.3: o corretor autônomo se cadastra pela tela pública com o próprio
 // CRECI (F ou J), assina sem imobiliária e fica pendente até o admin conferir o
@@ -45,6 +45,7 @@ test("autônomo se cadastra com o próprio CRECI, o admin ativa e ele abre o cat
   await expect(form.getByLabel("Nome da imobiliária")).toHaveCount(0);
 
   await form.getByLabel("Seu CRECI").fill(`${numero.slice(0, 3)}.${numero.slice(3)}-f`);
+  await form.getByLabel("Seu CPF ou CNPJ").fill(documentoDeTeste("cpf"));
   await form.getByLabel("Nome completo").fill(nome);
   await form.getByLabel("E-mail").fill(email);
   await form.getByLabel("Telefone com DDD").fill("48 99301-5520");

@@ -38,7 +38,7 @@ Me dê 2 ou 3 opções, com o impacto de cada uma no código, no custo e no pilo
 | % da comissão do PAUTA: não trava a Etapa 9 (o admin registra o valor em R$ do contrato; decidido em 06/11/2026) | 13 |
 | ~~Provedor do WhatsApp~~: decidido em 09/11/2026, Meta direto (Cloud API), com o número de teste gratuito até o piloto | 10 |
 | Custo por mensagem do WhatsApp no piloto | 13 |
-| Preço da mensalidade | 11 |
+| ~~Preço da mensalidade~~: decidido em 13/11/2026, dois preços (imobiliária e autônomo), cobrança depois da ativação; valores provisórios até o piloto | 11 |
 | Antecedência do aviso e prazo da renovação | 12 |
 | Termo de assinatura das imobiliárias e corretores (o aceite entra no 13.4) | 13 |
 
@@ -621,7 +621,7 @@ Depois confira o "Pronto quando" da Etapa 10, item por item. Se estiver tudo cer
 
 **Pronto quando:** assinante com pagamento vencido no Asaas perde o acesso sozinho.
 **Telas do protótipo:** AguardandoAtivacao (passo do pagamento) e as telas de pagamento criadas no passo 0.2.
-**Decidir antes:** preço da mensalidade.
+**Decidir antes:** nada: o modelo foi decidido em 13/11/2026 (dois preços, cobrança depois da ativação); os valores são provisórios até o piloto.
 
 **11.1 Abrir a etapa** *(`/clear` + modo de planejamento)*
 

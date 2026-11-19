@@ -15,6 +15,8 @@ export type AssinanteNaLista = {
   tipo: "imobiliaria" | "autonomo";
   nome: string;
   creci: string;
+  // CPF ou CNPJ de quem paga (Etapa 11). Null nas contas antigas, que informam depois.
+  documento: string | null;
   situacao: Situacao;
   // Bloqueado com o pagamento vencido: desbloquear não devolve o acesso.
   vencido: boolean;
@@ -43,7 +45,7 @@ export async function listaDeAssinantes(): Promise<AssinanteNaLista[]> {
     supabase
       .from("assinantes")
       .select(
-        "id, tipo, nome, creci, status, bloqueado_pelo_admin, criado_em, perfis!assinantes_responsavel_id_fkey(nome, telefone)",
+        "id, tipo, nome, creci, status, bloqueado_pelo_admin, criado_em, perfis!assinantes_responsavel_id_fkey(nome, telefone), dados_de_cobranca(cpf_cnpj)",
       )
       .order("criado_em", { ascending: true }),
     supabase.from("perfis").select("assinante_id").eq("tipo", "corretor").is("removido_em", null),
@@ -62,6 +64,7 @@ export async function listaDeAssinantes(): Promise<AssinanteNaLista[]> {
       tipo: a.tipo,
       nome: a.nome,
       creci: a.creci,
+      documento: campoDaLigacao<{ cpf_cnpj: string }>(a.dados_de_cobranca)?.cpf_cnpj ?? null,
       situacao: situacaoDe(a.status, a.bloqueado_pelo_admin),
       vencido: a.status === "vencido",
       responsavel: responsavel?.nome ?? "",

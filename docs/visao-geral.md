@@ -94,7 +94,7 @@ O que o app faz. Todos os 32 estão a construir no repositório novo (RF01 a RF0
 | RF24 | Proposta | Proprietário aceita ou recusa cada proposta; pode ter várias aceitas ao mesmo tempo | A construir |
 | RF25 | Venda | Corretor envia o contrato assinado por todas as partes (PDF), só a partir de uma proposta dele já aceita pelo proprietário | A construir |
 | RF26 | Venda | Admin confere o contrato; ao aprovar, o imóvel vira vendido e todas as outras propostas em aberto são recusadas automaticamente. Ao recusar, escreve o motivo, o corretor é avisado e pode reenviar, e o imóvel segue em negociação com as outras propostas valendo | A construir |
-| RF27 | Cobrança | Cobrar a mensalidade do assinante pelo Asaas (boleto, Pix ou cartão), com aviso de pagamento por webhook (preço em aberto) | A construir |
+| RF27 | Cobrança | Cobrar a mensalidade do assinante pelo Asaas (boleto, Pix ou cartão), com aviso de pagamento por webhook (dois preços, decidido em 13/11/2026; valores provisórios até o piloto) | A construir |
 | RF28 | Cobrança | Assinante com pagamento vencido perde o acesso sozinho | A construir |
 | RF29 | Avisos | Avisar usuários de eventos (imóvel aprovado, pedido de visita, proposta, contrato, venda, vencimento da exclusividade) por WhatsApp e por uma lista de avisos dentro do app | A construir |
 | RF30 | Exclusividade | Proprietário e admin recebem um aviso antes de os 6 meses de exclusividade vencerem (antecedência: a definir) | A construir |
@@ -145,9 +145,27 @@ O projeto recomeça do zero num repositório `PAUTA` e num projeto Supabase novo
 | 8. Proposta | Envio e aceite, várias ao mesmo tempo | Duas propostas aceitas deixam o imóvel em negociação | — |
 | 9. Contrato e venda | Envio, conferência, comissão | Aprovar marca vendido e recusa as outras numa operação só | — (o admin registra o valor em R$ do contrato; a % fica para antes do piloto) |
 | 10. Avisos | Lista no app e WhatsApp | Cada evento gera aviso na lista do app e entra na fila do WhatsApp de quem aceitou, com o envio à Meta testado por simulação (a entrega real fica para o piloto; decidido em 10/11/2026) | — (provedor decidido em 09/11/2026) |
-| 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Preço da mensalidade |
+| 11. Cobrança | Asaas em ambiente de testes | Assinante vencido perde o acesso sozinho | Nada: o modelo foi decidido em 13/11/2026; os valores reais, antes do piloto |
 | 12. Exclusividade | Aviso de vencimento e renovação | Sem renovação, o imóvel sai do catálogo sozinho | Antecedência do aviso |
 | 13. PWA, testes e deploy | SMTP, PWA, roteiro completo, Vercel | O app abre no celular de outra pessoa pelo endereço público | Texto final dos dois termos |
+
+## Decisões tomadas em 19/11/2026 (plano da Etapa 11)
+
+- O CPF ou CNPJ de quem paga é pedido no cadastro, porque o Asaas exige: a imobiliária informa o CNPJ e o autônomo informa CPF ou CNPJ. Os dígitos verificadores são conferidos na tela, no servidor e no banco, e o número é único entre assinantes, como o CRECI (excluir um pendente libera o número). As contas pendentes que já existem informam o número na tela de aguardando ativação. O admin vê o número junto com o CRECI; os corretores nunca veem. É dado pessoal e entra na LGPD (13.4).
+- Ao ativar, o PAUTA cria no Asaas o cliente e a assinatura mensal, depois da resposta da tela. Quem paga escolhe Pix, boleto ou cartão na fatura do Asaas, e o PAUTA nunca vê o cartão. A primeira mensalidade vence 7 dias depois da ativação, e as próximas vencem no mesmo dia de cada mês. Se o Asaas falhar, o assinante segue ativo e o painel do admin mostra "Cobrança não criada", com "Tentar de novo".
+- O acesso cai 3 dias depois do vencimento sem pagamento, para cobrir o boleto pago no último dia. O corte é calculado pela data no banco e não depende de o aviso do Asaas chegar; o aviso do Asaas também passa a assinatura para `vencido`. O pagamento confirmado volta para `ativo` só se não sobrar outra mensalidade vencida, e não libera quem está bloqueado pelo admin.
+- O bloqueio pelo admin não mexe na cobrança do Asaas. Se for preciso parar de cobrar, o admin cancela a assinatura no painel do Asaas.
+- Só o responsável da imobiliária e o autônomo veem e pagam as mensalidades. O corretor convidado vê só que não paga e, com a imobiliária vencida, a orientação de falar com o responsável.
+- Avisos novos: "mensalidade paga" e "mensalidade vencida", na lista do app e no WhatsApp de quem aceitou. O de vencida sai quando o Asaas avisa (um dia depois do vencimento) e diz até quando o acesso vale, para dar tempo de pagar antes do corte (passo 11.2a).
+- O contato da equipe PAUTA na tela de acesso suspenso fica numa variável de ambiente (`CONTATO_EQUIPE_PAUTA`). Sem ela, a tela mostra só "fale com a equipe PAUTA".
+- As visitas de um assinante com acesso suspenso (vencido ou bloqueado) não mudam, como as propostas (decidido no plano da Etapa 8): o proprietário segue respondendo.
+- A Etapa 11 usa valores provisórios de teste no sandbox, informados pela Hevelyn e guardados no banco. Enquanto faltar o valor do plano, a ativação não gera cobrança.
+
+## Decisões tomadas em 13/11/2026 (mensalidade, antes da Etapa 11)
+
+- Dois preços fixos: a imobiliária paga um valor e o corretor autônomo paga outro, menor. Os corretores convidados não pagam: seguem a assinatura da imobiliária. O valor não depende do tamanho da equipe, para não desestimular convites (a cobrança por corretor fica para depois do piloto, se aparecer imobiliária grande).
+- Os valores ainda não foram definidos. A Etapa 11 é feita no sandbox do Asaas com valores provisórios, guardados no banco (não no código) e marcados como provisórios. Os valores reais entram antes do piloto (Etapa 13), sem mudar código. Cada cobrança guarda o valor dela, para uma mudança de preço não alterar o histórico.
+- A mensalidade é cobrada depois de o admin ativar a assinatura (conferir o CRECI): ninguém paga para depois ser recusado, e não há estorno. Ativar já libera o acesso e gera a primeira cobrança; se ela vencer sem pagamento, a assinatura vira `vencido` e o acesso cai sozinho (RF28).
 
 ## Decisões tomadas em 10/11/2026 (WhatsApp, passo 10.3a)
 
@@ -364,7 +382,7 @@ Estes pontos travam requisitos acima e precisam de resposta antes de virar códi
 **Negócio**
 
 - [ ] Comissão do PAUTA: qual % (da comissão do corretor ou do valor do imóvel). Não trava a Etapa 9, mas precisa estar decidida antes do piloto, porque entra no texto do contrato
-- [ ] Preço da mensalidade (igual para imobiliária e corretor autônomo?)
+- [ ] Valores da mensalidade da imobiliária e do corretor autônomo. O modelo (dois preços, cobrança depois da ativação) foi decidido em 13/11/2026; a Etapa 11 usa valores provisórios. Decidir antes do piloto
 
 **Fluxo da venda**
 

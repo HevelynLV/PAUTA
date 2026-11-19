@@ -8388,6 +8388,327 @@ do $$ declare v text; a bigint; b bigint; s text := pg_temp.segredo_da_fila(); b
 end $$;
 
 -- ---------------------------------------------------------------
+-- 23. Cobrança (migrations 20261119130600_cobranca_tipos_de_aviso e 20261119130626_cobranca)
+-- ---------------------------------------------------------------
+
+-- O segredo do Asaas. Só o dono do banco lê o Vault: a primeira chamada de cada teste
+-- (ainda como dono) guarda o valor numa configuração da sessão, que o visitante lê.
+create or replace function pg_temp.segredo_asaas()
+returns text
+language plpgsql
+as $$
+declare
+  v text := current_setting('teste.segredo_asaas', true);
+begin
+  if coalesce(v, '') = '' then
+    select ds.decrypted_secret into v from vault.decrypted_secrets ds where ds.name = 'pauta_asaas';
+    perform set_config('teste.segredo_asaas', v, false);
+  end if;
+  return v;
+end;
+$$;
+
+-- Dá ao assinante de p_perfil o documento p_documento e o cliente p_cliente no Asaas
+-- (como o cadastro e o passo 11.2b fariam). Roda como dono do banco.
+create or replace function pg_temp.cliente_asaas(p_perfil uuid, p_documento text, p_cliente text)
+returns void
+language sql
+as $$
+  insert into public.dados_de_cobranca (assinante_id, cpf_cnpj, asaas_cliente_id)
+  select assinante_id, p_documento, p_cliente from public.perfis where id = p_perfil;
+$$;
+
+-- Manda um evento como o webhook mandaria. p_dias: vencimento contado de hoje (Florianópolis).
+create or replace function pg_temp.evento(p_evento text, p_cliente text, p_pagamento text,
+                                          p_status text, p_dias int, p_tipo text default 'PAYMENT_UPDATED')
+returns text
+language sql
+as $$
+  select public.registrar_evento_asaas(pg_temp.segredo_asaas(), p_evento, p_tipo,
+    jsonb_build_object(
+      'id', p_pagamento, 'customer', p_cliente, 'status', p_status, 'value', 99.9,
+      'dueDate', (now() at time zone 'America/Sao_Paulo')::date + p_dias,
+      'billingType', 'UNDEFINED', 'invoiceUrl', 'https://sandbox.asaas.com/i/' || p_pagamento));
+$$;
+
+do $$ declare v text; begin
+  select string_agg(c.relname || '=' || c.relrowsecurity::text, ' ' order by c.relname) into v
+  from pg_class c
+  where c.oid in ('public.planos'::regclass, 'public.dados_de_cobranca'::regclass,
+                  'public.cobrancas'::regclass, 'public.eventos_asaas'::regclass);
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: RLS ligado nas tabelas novas',
+          'cobrancas=true dados_de_cobranca=true eventos_asaas=true planos=true', v);
+end $$;
+
+do $$ declare v text; begin
+  select case when coalesce(max(decrypted_secret), '') = '' then 'falta'
+              when max(length(decrypted_secret)) < 32 then 'curto demais'
+              else 'existe' end into v
+  from vault.decrypted_secrets where name = 'pauta_asaas';
+  insert into resultado (teste, esperado, obtido)
+  values ('O segredo pauta_asaas está no Vault, com o valor do .env.local (sem ele, o webhook não grava)', 'existe', v);
+end $$;
+
+-- CPF e CNPJ (também o alfanumérico, de julho de 2026) pelos dígitos verificadores.
+do $$ declare v text; begin
+  select string_agg(public.documento_valido(t.x)::text, ' ' order by t.o) into v
+  from unnest(array['529.982.247-25', '529.982.247-24', '111.111.111-11', '11.222.333/0001-81',
+                    '11.222.333/0001-80', '12.ABC.345/01DE-35', '12.ABC.345/01DE-36', '', null])
+       with ordinality t(x, o);
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: CPF e CNPJ (com letras) conferidos pelos dígitos',
+          'true false false true false true false false false', v);
+end $$;
+
+-- O cadastro grava o documento normalizado e o tira do metadata; imobiliária só com
+-- CNPJ; documento repetido ou errado é recusado.
+do $$ declare v text; x text; begin
+  begin
+    perform pg_temp.criar_conta(pg_temp.u(31), json_build_object(
+      'tipo', 'autonomo', 'nome', 'Autônomo de Teste', 'telefone', '48999990000',
+      'creci', '93131-F', 'cpf_cnpj', '123.456.789-09')::jsonb);
+    select d.cpf_cnpj || ' ' || (u.raw_user_meta_data ? 'cpf_cnpj')::text into v
+    from public.perfis p
+    join public.dados_de_cobranca d on d.assinante_id = p.assinante_id
+    join auth.users u on u.id = p.id
+    where p.id = pg_temp.u(31);
+    v := v || ' / ' || pg_temp.tentar(format('select pg_temp.criar_conta(%L, %L::jsonb)', pg_temp.u(11),
+      json_build_object('tipo', 'imobiliaria', 'nome', 'Responsável de Teste', 'telefone', '48999990000',
+        'nome_imobiliaria', 'Imobiliária de Teste', 'creci', '12345-J', 'cpf_cnpj', '987.654.321-00')));
+    v := v || ' / ' || pg_temp.tentar(format('select pg_temp.criar_conta(%L, %L::jsonb)', pg_temp.u(32),
+      json_build_object('tipo', 'autonomo', 'nome', 'Autônomo de Teste', 'telefone', '48999990000',
+        'creci', '93232-F', 'cpf_cnpj', '12345678909')));
+    v := v || ' / ' || pg_temp.tentar(format('select pg_temp.criar_conta(%L, %L::jsonb)', pg_temp.u(33),
+      json_build_object('tipo', 'autonomo', 'nome', 'Autônomo de Teste', 'telefone', '48999990000',
+        'creci', '93333-F', 'cpf_cnpj', '123.456.789-00')));
+    perform pg_temp.criar_conta(pg_temp.u(12), json_build_object(
+      'tipo', 'imobiliaria', 'nome', 'Responsável de Teste', 'telefone', '48999990000',
+      'nome_imobiliaria', 'Imobiliária de Teste', 'creci', '67890-J', 'cpf_cnpj', '12.abc.345/01de-35')::jsonb);
+    select d.cpf_cnpj into x
+    from public.perfis p join public.dados_de_cobranca d on d.assinante_id = p.assinante_id
+    where p.id = pg_temp.u(12);
+    v := v || ' / ' || x;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: o cadastro grava o CPF ou CNPJ, só CNPJ para imobiliária, sem repetido',
+          '12345678909 false / bloqueado (P0001) documento_invalido / bloqueado (23505) / bloqueado (P0001) documento_invalido / 12ABC34501DE35', v);
+end $$;
+
+-- Leitura: só o responsável e o admin veem documento e cobranças; o corretor convidado,
+-- outro assinante e o proprietário não. Ninguém escreve pela API.
+do $$ declare v text := ''; x text; p uuid; begin
+  begin
+    perform pg_temp.montar_equipe();
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'ativo');
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.cliente_asaas(pg_temp.u(11), '11222333000181', 'cus_t11');
+    perform pg_temp.cliente_asaas(pg_temp.u(31), '12345678909', 'cus_t31');
+    perform pg_temp.evento('evt_t1', 'cus_t11', 'pay_t11', 'PENDING', 5);
+    perform pg_temp.evento('evt_t2', 'cus_t31', 'pay_t31', 'PENDING', 5);
+    foreach p in array array[pg_temp.u(11), pg_temp.u(21), pg_temp.u(12), pg_temp.u(31), pg_temp.u(1), pg_temp.u(9)] loop
+      perform pg_temp.entrar_como(p);
+      select (select count(*) from public.dados_de_cobranca where asaas_cliente_id like 'cus\_t%')::text || '-'
+          || (select count(*) from public.cobrancas where asaas_pagamento_id like 'pay\_t%')::text into x;
+      v := v || x || ' ';
+      reset role;
+    end loop;
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    v := v || '/ ' || pg_temp.tentar(format(
+      'insert into public.cobrancas (assinante_id, asaas_pagamento_id, valor_centavos, vencimento) select assinante_id, ''pay_x'', 100, current_date from public.perfis where id = %L',
+      pg_temp.u(11)));
+    v := v || ' / ' || pg_temp.tentar('update public.dados_de_cobranca set asaas_cliente_id = ''cus_x''');
+    v := v || ' / ' || pg_temp.tentar('insert into public.planos (tipo, valor_centavos) values (''imobiliaria'', 1)');
+    reset role;
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := v || ' / ' || pg_temp.tentar('update public.cobrancas set status = ''paga''');
+    v := v || ' / ' || pg_temp.tentar('select count(*) from public.eventos_asaas');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: documento e cobranças só para o responsável e o admin; ninguém grava pela API',
+          '1-1 0-0 0-0 1-1 0-0 2-2 / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+-- Planos: todos leem (o cadastro mostra o preço), só o admin cadastra e altera.
+do $$ declare v text; begin
+  begin
+    perform pg_temp.criar_admin(pg_temp.u(9));
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'ativo');
+    delete from public.planos where tipo = 'autonomo';
+    perform pg_temp.entrar_como(pg_temp.u(9));
+    v := pg_temp.tentar('insert into public.planos (tipo, valor_centavos) values (''autonomo'', 12345)');
+    v := v || ' / ' || pg_temp.tentar('update public.planos set valor_centavos = 0 where tipo = ''autonomo''');
+    reset role;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar('update public.planos set valor_centavos = 1 where tipo = ''autonomo''')
+           || ' ' || (select valor_centavos::text from public.planos where tipo = 'autonomo');
+    reset role;
+    perform pg_temp.entrar_como_visitante();
+    v := v || ' / ' || (select count(*)::text from public.planos where tipo = 'autonomo');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: o admin cadastra o plano; assinante não muda o preço; visitante lê',
+          'permitido / bloqueado (23514) / permitido 12345 / 1', v);
+end $$;
+
+-- O responsável informa o documento uma vez; corretor e proprietário não; repetido não.
+do $$ declare v text; begin
+  begin
+    perform pg_temp.montar_equipe();
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'pendente');
+    perform pg_temp.criar_proprietario(pg_temp.u(1));
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := pg_temp.tentar('select public.informar_documento(''529.982.247-25'')');
+    perform pg_temp.entrar_como(pg_temp.u(1));
+    v := v || ' / ' || pg_temp.tentar('select public.informar_documento(''529.982.247-25'')');
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar('select public.informar_documento(''529.982.247-25'')');
+    v := v || ' / ' || pg_temp.tentar('select public.informar_documento(''123.456.789-09'')');
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    v := v || ' / ' || pg_temp.tentar('select public.informar_documento(''123.456.789-09'')');
+    v := v || ' / ' || pg_temp.tentar('select public.informar_documento(''11.222.333/0001-81'')');
+    perform pg_temp.entrar_como(pg_temp.u(12));
+    v := v || ' / ' || pg_temp.tentar('select public.informar_documento(''11222333000181'')');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: o responsável informa o CPF ou CNPJ uma vez, sem repetir o de outro',
+          'bloqueado (42501) / bloqueado (42501) / permitido / bloqueado (P0001) ja_informado / bloqueado (P0001) cnpj_invalido / permitido / bloqueado (P0001) documento_repetido', v);
+end $$;
+
+-- Sem o segredo certo, nada: nem gravar evento, nem ler dados de quem paga, nem as funções internas.
+do $$ declare v text; a uuid; begin
+  begin
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'ativo');
+    select assinante_id into a from public.perfis where id = pg_temp.u(31);
+    perform pg_temp.entrar_como_visitante();
+    v := pg_temp.tentar('select public.registrar_evento_asaas(''errado'', ''evt_x'', ''PAYMENT_UPDATED'', ''{}'')');
+    v := v || ' / ' || pg_temp.tentar(format('select * from public.dados_para_cobrar(''errado'', %L)', a));
+    v := v || ' / ' || pg_temp.tentar(format('select public.registrar_assinatura_asaas(null, %L, ''cus_x'')', a));
+    reset role;
+    perform pg_temp.entrar_como(pg_temp.u(31));
+    v := v || ' / ' || pg_temp.tentar('select public.registrar_evento_asaas(''errado'', ''evt_x'', ''PAYMENT_UPDATED'', ''{}'')');
+    v := v || ' / ' || pg_temp.tentar(format('select public.mensalidade_atrasada(%L)', a));
+    v := v || ' / ' || pg_temp.tentar(format('select public.assinatura_com_acesso(%L)', a));
+    v := v || ' / ' || pg_temp.tentar('select public.conferir_segredo_asaas(''x'')');
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: sem o segredo certo, nada (visitante ou logado)',
+          'bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501) / bloqueado (42501)', v);
+end $$;
+
+-- Webhook: o mesmo evento não muda nada duas vezes; paga não volta para pendente; evento
+-- de cliente que não é do PAUTA ou de tipo que não interessa só fica registrado.
+do $$ declare v text; x text; begin
+  begin
+    perform pg_temp.criar_assinante(pg_temp.u(31), 'ativo');
+    perform pg_temp.cliente_asaas(pg_temp.u(31), '12345678909', 'cus_t31');
+    perform pg_temp.segredo_asaas();
+    perform pg_temp.entrar_como_visitante();
+    v := pg_temp.evento('evt_t1', 'cus_t31', 'pay_t1', 'PENDING', 5, 'PAYMENT_CREATED');
+    v := v || ' ' || pg_temp.evento('evt_t1', 'cus_t31', 'pay_t1', 'RECEIVED', 5, 'PAYMENT_RECEIVED');
+    reset role;
+    select status::text into x from public.cobrancas where asaas_pagamento_id = 'pay_t1';
+    v := v || ' ' || x;
+    perform pg_temp.entrar_como_visitante();
+    v := v || ' / ' || pg_temp.evento('evt_t2', 'cus_t31', 'pay_t1', 'RECEIVED', 5, 'PAYMENT_RECEIVED');
+    v := v || ' ' || pg_temp.evento('evt_t3', 'cus_t31', 'pay_t1', 'PENDING', 5);
+    reset role;
+    select status::text || ' ' || (pago_em is not null)::text || ' ' || valor_centavos::text
+           || ' ' || forma || ' ' || link_fatura into x
+    from public.cobrancas where asaas_pagamento_id = 'pay_t1';
+    v := v || ' ' || x;
+    perform pg_temp.entrar_como_visitante();
+    v := v || ' / ' || pg_temp.evento('evt_t4', 'cus_outro', 'pay_t9', 'PENDING', 5);
+    v := v || ' ' || pg_temp.evento('evt_t5', 'cus_t31', 'pay_t1', 'PENDING', 5, 'SUBSCRIPTION_UPDATED');
+    v := v || ' ' || pg_temp.evento('evt_t6', 'cus_t31', 'pay_t1', 'DUNNING_REQUESTED', 5);
+    v := v || ' ' || pg_temp.evento('evt_t7', 'cus_t31', 'pay_t1', 'REFUNDED', 5, 'PAYMENT_REFUNDED');
+    reset role;
+    select v || ' ' || status::text || ' ' || (pago_em is not null)::text into v
+    from public.cobrancas where asaas_pagamento_id = 'pay_t1';
+    select v || ' ' || string_agg(resultado, ',' order by id) into v
+    from public.eventos_asaas where id like 'evt\_t%';
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: webhook idempotente, paga não volta atrás, evento alheio só registrado',
+          'registrado repetido pendente / registrado registrado paga true 9990 UNDEFINED https://sandbox.asaas.com/i/pay_t1 / desconhecido ignorado ignorado registrado estornada true registrado,registrado,registrado,desconhecido,ignorado,ignorado,registrado', v);
+end $$;
+
+-- RF28: a mensalidade em aberto corta o acesso no 4º dia depois do vencimento, da
+-- imobiliária e dos corretores dela, sem esperar o Asaas; avisa o responsável; corretor
+-- novo não entra; o pagamento devolve o acesso, menos para quem o admin bloqueou.
+do $$ declare v text := ''; x text; begin
+  begin
+    perform pg_temp.montar_equipe();
+    perform pg_temp.cliente_asaas(pg_temp.u(11), '11222333000181', 'cus_t11');
+    perform pg_temp.segredo_asaas();
+    perform pg_temp.entrar_como_visitante();
+    perform pg_temp.evento('evt_t1', 'cus_t11', 'pay_t1', 'PENDING', -3);
+    reset role;
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := public.eh_assinante_ativo()::text;
+    reset role;
+    -- Agora vencida há 4 dias (a data muda como o Asaas mudaria, por outro evento).
+    perform pg_temp.entrar_como_visitante();
+    perform pg_temp.evento('evt_t2', 'cus_t11', 'pay_t1', 'OVERDUE', -4);
+    reset role;
+    select a.status::text into x from public.assinantes a join public.perfis p on p.assinante_id = a.id where p.id = pg_temp.u(11);
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(11));
+    v := v || ' ' || public.eh_assinante_ativo()::text;
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := v || ' ' || public.eh_assinante_ativo()::text;
+    reset role;
+    v := v || ' ' || (select count(*)::text from public.avisos
+                      where destinatario_id = pg_temp.u(11) and tipo = 'mensalidade_vencida');
+    perform pg_temp.criar_convite(pg_temp.u(11), 'c-3', null, now() + interval '1 day');
+    v := v || ' ' || pg_temp.tentar(format('select pg_temp.criar_corretor(%L, ''c-3'')', pg_temp.u(23)));
+    perform pg_temp.entrar_como_visitante();
+    perform pg_temp.evento('evt_t3', 'cus_t11', 'pay_t1', 'RECEIVED', -4, 'PAYMENT_RECEIVED');
+    reset role;
+    select a.status::text into x from public.assinantes a join public.perfis p on p.assinante_id = a.id where p.id = pg_temp.u(11);
+    v := v || ' / ' || x;
+    perform pg_temp.entrar_como(pg_temp.u(21));
+    v := v || ' ' || public.eh_assinante_ativo()::text;
+    reset role;
+    v := v || ' ' || (select count(*)::text from public.avisos
+                      where destinatario_id = pg_temp.u(11) and tipo = 'mensalidade_paga');
+    -- Bloqueada pelo admin: o pagamento não libera.
+    perform pg_temp.mudar_status_do_assinante_de(pg_temp.u(12), 'bloqueado');
+    perform pg_temp.cliente_asaas(pg_temp.u(12), '99888777000100', 'cus_t12');
+    perform pg_temp.entrar_como_visitante();
+    perform pg_temp.evento('evt_t4', 'cus_t12', 'pay_t2', 'RECEIVED', 0, 'PAYMENT_RECEIVED');
+    reset role;
+    perform pg_temp.entrar_como(pg_temp.u(12));
+    v := v || ' / ' || public.eh_assinante_ativo()::text;
+    raise exception using errcode = 'TR001';
+  exception when sqlstate 'TR001' then null;
+            when others then v := pg_temp.bloqueio(sqlstate, sqlerrm);
+  end;
+  insert into resultado (teste, esperado, obtido)
+  values ('Cobrança: 3 dias depois do vencimento ainda acessa; no 4º a imobiliária e os corretores perdem o acesso; pagar devolve, menos ao bloqueado',
+          'true / vencido false false 1 bloqueado (P0001) / ativo true 1 / false', v);
+end $$;
+
+-- ---------------------------------------------------------------
 -- Resultado
 -- ---------------------------------------------------------------
 select
